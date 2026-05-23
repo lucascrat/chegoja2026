@@ -379,22 +379,507 @@ function startVehicleTelemetryTicks() {
 }
 
 // ==========================================
-// OPERATIONAL SLIDERS & CONTROLS
+// OPERATIONAL SLIDERS & CONTROLS (SYNCED)
 // ==========================================
-function setupOperationalControls() {
+async function setupOperationalControls() {
     const slider = document.getElementById('search-radius-slider');
     const displayVal = document.getElementById('search-radius-val');
     
     if (slider && displayVal) {
+        // Fetch current search radius from server dynamically
+        try {
+            const res = await fetch(`${API_BASE}/api/settings`);
+            if (res.ok) {
+                const settings = await res.json();
+                if (settings && settings.searchRadius !== undefined) {
+                    slider.value = settings.searchRadius;
+                    displayVal.textContent = `${settings.searchRadius} km`;
+                }
+            }
+        } catch (e) {
+            console.error("Failed to load search radius settings from server", e);
+        }
+
         slider.addEventListener('input', (e) => {
             const val = e.target.value;
             displayVal.textContent = `${val} km`;
         });
         
-        slider.addEventListener('change', (e) => {
-            const val = e.target.value;
-            addServerLog('system', `Parâmetro: Raio de busca atualizado para ${val} km.`);
+        slider.addEventListener('change', async (e) => {
+            const val = parseFloat(e.target.value);
+            addServerLog('system', `Parâmetro: Sincronizando raio de busca para ${val} km...`);
+            
+            // Sync setting to active Node.js server!
+            try {
+                const res = await fetch(`${API_BASE}/api/settings/update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ searchRadius: val })
+                });
+                if (res.ok) {
+                    addServerLog('system', `Parâmetro: Raio de busca atualizado e sincronizado para ${val} km.`);
+                }
+            } catch (err) {
+                console.error("Failed to sync search radius", err);
+            }
         });
+    }
+}
+
+// ==========================================
+// PORTAL DE LOGIN RESTAL (PROTEÇÃO POR SENHA)
+// ==========================================
+const AudioSynth = {
+    ctx: null,
+    init() {
+        if (!this.ctx) {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    },
+    playBuzzer() {
+        try {
+            this.init();
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.type = "sawtooth";
+            osc.frequency.setValueAtTime(100, this.ctx.currentTime); // Low buzz
+            gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.35);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.35);
+        } catch (e) { console.warn(e); }
+    },
+    playSuccess() {
+        try {
+            this.init();
+            const notes = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
+            notes.forEach((freq, idx) => {
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.type = "triangle";
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.08);
+                gain.gain.setValueAtTime(0.08, this.ctx.currentTime + idx * 0.08);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + idx * 0.08 + 0.35);
+                osc.start(this.ctx.currentTime + idx * 0.08);
+                osc.stop(this.ctx.currentTime + idx * 0.08 + 0.35);
+            });
+        } catch (e) { console.warn(e); }
+    }
+};
+
+function toggleLoginPasswordVisibility() {
+    const input = document.getElementById("login-password-input");
+    const icon = document.getElementById("password-visibility-icon");
+    if (!input || !icon) return;
+    if (input.type === "password") {
+        input.type = "text";
+        icon.textContent = "visibility_off";
+    } else {
+        input.type = "password";
+        icon.textContent = "visibility";
+    }
+}
+
+function checkAdminSessionState() {
+    const auth = sessionStorage.getItem("cj_admin_authenticated");
+    const gate = document.getElementById("admin-login-gate");
+    if (auth === "true") {
+        if (gate) gate.classList.add("hidden");
+    }
+}
+
+async function submitAdminPasswordAuthentication() {
+    const input = document.getElementById("login-password-input");
+    const errorText = document.getElementById("login-error-text");
+    const gate = document.getElementById("admin-login-gate");
+    const inputWrapper = document.getElementById("password-input-wrapper");
+    
+    if (!input) return;
+    const password = input.value.trim();
+    
+    if (password === "01Deus02@@@@") {
+        AudioSynth.playSuccess();
+        sessionStorage.setItem("cj_admin_authenticated", "true");
+        if (errorText) errorText.classList.add("hidden");
+        
+        if (gate) {
+            gate.style.transition = "all 0.5s ease-out";
+            gate.style.opacity = "0";
+            gate.style.transform = "scale(1.05)";
+            setTimeout(() => {
+                gate.classList.add("hidden");
+            }, 500);
+        }
+        addServerLog("system", "Autenticação efetuada com sucesso via console restrito.");
+    } else {
+        AudioSynth.playBuzzer();
+        if (errorText) errorText.classList.remove("hidden");
+        
+        if (inputWrapper) {
+            inputWrapper.style.borderColor = "#ef4444";
+            inputWrapper.classList.add("animate-shake");
+            
+            if (!document.getElementById("shake-animation-style")) {
+                const style = document.createElement("style");
+                style.id = "shake-animation-style";
+                style.innerHTML = `
+                    @keyframes shake-input {
+                        0%, 100% { transform: translateX(0); }
+                        20%, 60% { transform: translateX(-6px); }
+                        40%, 80% { transform: translateX(6px); }
+                    }
+                    .animate-shake {
+                        animation: shake-input 0.35s ease-in-out;
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+            setTimeout(() => {
+                inputWrapper.classList.remove("animate-shake");
+                inputWrapper.style.borderColor = "rgba(255, 255, 255, 0.05)";
+            }, 400);
+        }
+        input.value = "";
+        input.focus();
+        addServerLog("alert", "Falha de autenticação: senha operacional incorreta.");
+    }
+}
+
+window.toggleLoginPasswordVisibility = toggleLoginPasswordVisibility;
+window.submitAdminPasswordAuthentication = submitAdminPasswordAuthentication;
+
+// ==========================================
+// TABS NAVIGATION CONTROLLERS
+// ==========================================
+function switchAdminTab(tabId) {
+    const tabs = ['overview', 'drivers', 'clients', 'dynamics', 'trips'];
+    tabs.forEach(t => {
+        const btn = document.getElementById(`tab-btn-${t}`);
+        const view = document.getElementById(`view-admin-${t}`);
+        if (btn && view) {
+            if (t === tabId) {
+                btn.className = "tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-primary text-black flex items-center gap-2 shadow-lg shadow-primary/5 transition-all";
+                view.classList.remove("hidden");
+            } else {
+                btn.className = "tab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/[0.03] flex items-center gap-2 transition-all";
+                view.classList.add("hidden");
+            }
+        }
+    });
+    
+    if (tabId === 'drivers') {
+        fetchAndRenderDriversTable();
+    } else if (tabId === 'clients') {
+        fetchAndRenderClientsTable();
+    } else if (tabId === 'dynamics') {
+        fetchAndRenderDynamicsGrid();
+    } else if (tabId === 'trips') {
+        fetchAndRenderTripsTable();
+    } else if (tabId === 'overview') {
+        if (adminState.map) {
+            setTimeout(() => adminState.map.invalidateSize(), 50);
+        }
+    }
+    
+    addServerLog("system", `Navegando para o painel de gerenciamento: ${tabId.toUpperCase()}`);
+}
+window.switchAdminTab = switchAdminTab;
+
+// ==========================================
+// NEW OPERATIONAL DATA TABLES INTEGRATION
+// ==========================================
+
+// 1. DRIVERS TABLE RENDERER
+async function fetchAndRenderDriversTable() {
+    try {
+        const res = await fetch(`${API_BASE}/api/drivers`);
+        if (!res.ok) throw new Error("Status " + res.status);
+        const drivers = await res.json();
+        
+        const tbody = document.getElementById('admin-drivers-table-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        
+        drivers.forEach(d => {
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-white/[0.01] border-b border-white/5 transition-all";
+            
+            let statusBadge = '';
+            if (d.overall_status === 'approved') {
+                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-accent-green/10 text-accent-green font-bold text-[9px] uppercase">Aprovado</span>';
+            } else {
+                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-accent-blue/10 text-accent-blue font-bold text-[9px] uppercase">Pendente</span>';
+            }
+            
+            const isCnhApproved = d.cnh_approved ? 
+                '<span class="material-symbols-outlined text-accent-green text-[18px]">verified</span>' : 
+                '<span class="material-symbols-outlined text-slate-650 text-[18px]">pending</span>';
+                
+            const isResApproved = d.res_approved ? 
+                '<span class="material-symbols-outlined text-accent-green text-[18px]">verified</span>' : 
+                '<span class="material-symbols-outlined text-slate-650 text-[18px]">pending</span>';
+
+            const activeToggle = `
+                <label class="relative inline-flex items-center cursor-pointer select-none">
+                    <input type="checkbox" class="sr-only peer" ${d.active ? 'checked' : ''} onchange="toggleDriverActiveState(${d.id}, this.checked)">
+                    <div class="w-9 h-5 bg-zinc-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 peer-checked:after:bg-black peer-checked:bg-primary after:rounded-full after:h-4 after:w-4 after:transition-all"></div>
+                </label>
+            `;
+
+            tr.innerHTML = `
+                <td class="p-4 flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full overflow-hidden border border-white/10 shrink-0">
+                        <img alt="Avatar" class="w-full h-full object-cover" src="${d.avatar || 'https://randomuser.me/api/portraits/lego/1.jpg'}"/>
+                    </div>
+                    <span class="text-slate-500 font-bold">#${d.id}</span>
+                </td>
+                <td class="p-4 font-bold text-white text-sm">${d.name}</td>
+                <td class="p-4 font-mono text-slate-400">${d.phone}</td>
+                <td class="p-4 font-bold text-white">${d.vehicle_desc || 'S/V'} <span class="block text-[9px] font-bold text-slate-500 font-mono tracking-wider mt-0.5 uppercase">${d.vehicle_plate || 'Sem Placa'}</span></td>
+                <td class="p-4 text-center font-bold text-[#ccff00]">${parseFloat(d.rating || 5.0).toFixed(2)}</td>
+                <td class="p-4 text-center">${isCnhApproved}</td>
+                <td class="p-4 text-center">${isResApproved}</td>
+                <td class="p-4 text-center">${statusBadge}</td>
+                <td class="p-4 text-center">${activeToggle}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (e) {
+        console.error("Failed to render drivers table:", e);
+    }
+}
+
+async function toggleDriverActiveState(id, active) {
+    addServerLog('system', `Ação: Alterando status operacional do motorista #${id} para ${active ? 'ONLINE' : 'OFFLINE'}.`);
+    const driver = adminState.drivers.find(d => d.id === id);
+    if (driver) {
+        driver.active = active;
+        addServerLog('db', `Motorista ${driver.name} agora está ${active ? 'Ativo e visível no mapa' : 'Inativo'}.`);
+        updateMapMarkers(adminState.drivers);
+    }
+}
+window.toggleDriverActiveState = toggleDriverActiveState;
+
+// 2. CLIENTS TABLE RENDERER
+async function fetchAndRenderClientsTable() {
+    try {
+        const res = await fetch(`${API_BASE}/api/clients`);
+        if (!res.ok) throw new Error("Status " + res.status);
+        const clients = await res.json();
+        
+        const tbody = document.getElementById('admin-clients-table-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        
+        if (clients.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-slate-500 font-bold">Nenhum cliente cadastrado no banco de dados.</td></tr>`;
+            return;
+        }
+        
+        clients.forEach(c => {
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-white/[0.01] border-b border-white/5 transition-all";
+            
+            const dateStr = new Date(c.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            
+            tr.innerHTML = `
+                <td class="p-4 flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full overflow-hidden border border-white/10 shrink-0">
+                        <img alt="Avatar" class="w-full h-full object-cover" src="${c.avatar || 'https://randomuser.me/api/portraits/lego/3.jpg'}"/>
+                    </div>
+                    <span class="text-slate-500 font-bold">#${c.id}</span>
+                </td>
+                <td class="p-4 font-bold text-white text-sm">${c.name}</td>
+                <td class="p-4 font-mono text-slate-400">${c.phone}</td>
+                <td class="p-4 font-bold text-slate-300">${c.email || 'Não informado'}</td>
+                <td class="p-4 text-center font-bold text-[#ccff00]">${parseFloat(c.rating || 5.0).toFixed(2)}</td>
+                <td class="p-4 text-center text-slate-500 font-mono">${dateStr}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (e) {
+        console.error("Failed to render clients table:", e);
+    }
+}
+
+// 3. DYNAMIC PRICING GRID RENDERER
+async function fetchAndRenderDynamicsGrid() {
+    try {
+        const res = await fetch(`${API_BASE}/api/dynamics`);
+        if (!res.ok) throw new Error("Status " + res.status);
+        const zones = await res.json();
+        
+        const grid = document.getElementById('admin-dynamics-grid-container');
+        if (!grid) return;
+        grid.innerHTML = '';
+        
+        zones.forEach(z => {
+            const card = document.createElement('div');
+            card.className = "glass-panel p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden animate-fade-in";
+            
+            card.innerHTML = `
+                <div class="absolute -right-4 -top-4 w-16 h-16 bg-[#ccff00]/5 rounded-full blur-xl"></div>
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <h4 class="text-white font-extrabold text-sm">${z.name}</h4>
+                        <span class="text-[9px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold uppercase tracking-wider mt-1.5 inline-block">Zona Operacional</span>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-zinc-950 flex items-center justify-center border border-white/5">
+                        <span class="material-symbols-outlined text-[20px] text-[#ccff00]">insights</span>
+                    </div>
+                </div>
+                
+                <div class="flex flex-col gap-2.5 mb-5 border-t border-white/5 pt-3">
+                    <div class="flex justify-between text-[10px] font-bold">
+                        <span class="text-slate-400">Multiplicador Tarifário:</span>
+                        <span class="text-[#ccff00] font-black">${parseFloat(z.multiplier).toFixed(2)}x</span>
+                    </div>
+                    <div class="flex justify-between text-[10px] font-bold">
+                        <span class="text-slate-400">Tarifa de Partida (Base):</span>
+                        <span class="text-white font-black">R$ ${parseFloat(z.base_fare).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div class="flex justify-between text-[10px] font-bold">
+                        <span class="text-slate-400">Taxa por Quilômetro:</span>
+                        <span class="text-white font-black">R$ ${parseFloat(z.rate_per_km).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/km</span>
+                    </div>
+                    <div class="flex justify-between text-[10px] font-bold">
+                        <span class="text-slate-400">Taxa por Minuto:</span>
+                        <span class="text-white font-black">R$ ${parseFloat(z.rate_per_minute).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/min</span>
+                    </div>
+                </div>
+                
+                <button class="w-full py-2.5 bg-primary hover:bg-primary-hover active:scale-[0.98] text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md shadow-primary/5" onclick="openDynamicEditDrawer(${z.id}, '${z.name}', ${z.multiplier}, ${z.base_fare}, ${z.rate_per_km}, ${z.rate_per_minute})">
+                    Editar Parâmetros
+                    <span class="material-symbols-outlined text-[15px] font-bold">edit</span>
+                </button>
+            `;
+            grid.appendChild(card);
+        });
+    } catch (e) {
+        console.error("Failed to render dynamic pricing grid:", e);
+    }
+}
+
+// Dynamics modal actions
+function openDynamicEditDrawer(id, name, multiplier, baseFare, rateKm, rateMin) {
+    const drawer = document.getElementById('dynamic-edit-drawer');
+    if (!drawer) return;
+    
+    document.getElementById('dyn-edit-id').value = id;
+    document.getElementById('dyn-edit-title').textContent = name;
+    document.getElementById('dyn-edit-multiplier').value = multiplier;
+    document.getElementById('dyn-edit-base').value = baseFare;
+    document.getElementById('dyn-edit-km').value = rateKm;
+    document.getElementById('dyn-edit-min').value = rateMin;
+    
+    drawer.classList.remove('hidden');
+    drawer.classList.add('flex');
+    setTimeout(() => {
+        drawer.classList.remove('opacity-0');
+        drawer.classList.add('opacity-100');
+    }, 10);
+}
+
+function closeDynamicEditDrawer() {
+    const drawer = document.getElementById('dynamic-edit-drawer');
+    if (!drawer) return;
+    
+    drawer.classList.remove('opacity-100');
+    drawer.classList.add('opacity-0');
+    setTimeout(() => {
+        drawer.classList.remove('flex');
+        drawer.classList.add('hidden');
+    }, 300);
+}
+
+async function submitDynamicPricingUpdate() {
+    const id = document.getElementById('dyn-edit-id').value;
+    const multiplier = parseFloat(document.getElementById('dyn-edit-multiplier').value);
+    const baseFare = parseFloat(document.getElementById('dyn-edit-base').value);
+    const rateKm = parseFloat(document.getElementById('dyn-edit-km').value);
+    const rateMin = parseFloat(document.getElementById('dyn-edit-min').value);
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/dynamics/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id,
+                multiplier,
+                base_fare: baseFare,
+                rate_per_km: rateKm,
+                rate_per_minute: rateMin
+            })
+        });
+        
+        if (!res.ok) throw new Error("Status " + res.status);
+        const data = await res.json();
+        
+        if (data.success) {
+            AudioSynth.playSuccess();
+            addServerLog('db', `Tarifa dinâmica da zona #${id} atualizada com sucesso.`);
+            closeDynamicEditDrawer();
+            fetchAndRenderDynamicsGrid();
+        }
+    } catch (e) {
+        console.error("Failed to update dynamics:", e);
+        addServerLog('alert', `Falha ao atualizar tarifa: ${e.message}`);
+    }
+}
+
+window.openDynamicEditDrawer = openDynamicEditDrawer;
+window.closeDynamicEditDrawer = closeDynamicEditDrawer;
+window.submitDynamicPricingUpdate = submitDynamicPricingUpdate;
+
+// 4. TRIPS TABLE RENDERER
+async function fetchAndRenderTripsTable() {
+    try {
+        const res = await fetch(`${API_BASE}/api/trips`);
+        if (!res.ok) throw new Error("Status " + res.status);
+        const trips = await res.json();
+        
+        const tbody = document.getElementById('admin-trips-table-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        
+        if (trips.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-slate-500 font-bold">Nenhuma viagem registrada na plataforma.</td></tr>`;
+            return;
+        }
+        
+        trips.forEach(t => {
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-white/[0.01] border-b border-white/5 transition-all";
+            
+            const dateStr = new Date(t.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+            
+            let statusBadge = '';
+            if (t.status === 'concluded') {
+                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-accent-green/10 text-accent-green font-bold text-[9px] uppercase">Concluída</span>';
+            } else if (t.status === 'canceled') {
+                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-accent-red/10 text-accent-red font-bold text-[9px] uppercase">Cancelada</span>';
+            } else {
+                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-[#ccff00]/10 text-[#ccff00] font-bold text-[9px] uppercase animate-pulse">Em Andamento</span>';
+            }
+            
+            tr.innerHTML = `
+                <td class="p-4 font-mono font-bold text-slate-500">#${t.id}</td>
+                <td class="p-4 font-bold text-white text-sm">${t.client_name || 'Passageiro'}</td>
+                <td class="p-4 font-bold text-white text-sm">${t.driver_name || 'Motorista'}</td>
+                <td class="p-4 text-slate-400 truncate max-w-[150px]">${t.pickup_address}</td>
+                <td class="p-4 text-slate-400 truncate max-w-[150px]">${t.dest_address}</td>
+                <td class="p-4 text-center font-black text-white">R$ ${parseFloat(t.fare).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td class="p-4 text-center">${statusBadge}</td>
+                <td class="p-4 text-center text-slate-500 font-mono">${dateStr}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (e) {
+        console.error("Failed to render trips table:", e);
     }
 }
 
@@ -402,6 +887,9 @@ function setupOperationalControls() {
 // INITIALIZATION
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
+    // Check if user is already authenticated in this session
+    checkAdminSessionState();
+    
     initAdminClock();
     initAdminGlobalMap();
     setupOperationalControls();

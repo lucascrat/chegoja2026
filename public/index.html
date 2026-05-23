@@ -151,11 +151,35 @@
         </div>
     </header>
 
+    <!-- ADMIN PORTAL MAIN NAVIGATION TABS -->
+    <div class="px-8 py-3 bg-slate-900/30 border-b border-white/5 flex gap-2 overflow-x-auto no-scrollbar shrink-0 select-none">
+        <button onclick="switchAdminTab('overview')" id="tab-btn-overview" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold bg-primary text-black flex items-center gap-2 shadow-lg shadow-primary/5 transition-all">
+            <span class="material-symbols-outlined text-[18px]">dashboard</span> Visão Geral
+        </button>
+        <button onclick="switchAdminTab('drivers')" id="tab-btn-drivers" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/[0.03] flex items-center gap-2 transition-all">
+            <span class="material-symbols-outlined text-[18px]">local_taxi</span> Motoristas
+        </button>
+        <button onclick="switchAdminTab('clients')" id="tab-btn-clients" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/[0.03] flex items-center gap-2 transition-all">
+            <span class="material-symbols-outlined text-[18px]">person</span> Clientes
+        </button>
+        <button onclick="switchAdminTab('dynamics')" id="tab-btn-dynamics" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/[0.03] flex items-center gap-2 transition-all">
+            <span class="material-symbols-outlined text-[18px]">insights</span> Tarifas Dinâmicas
+        </button>
+        <button onclick="switchAdminTab('trips')" id="tab-btn-trips" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/[0.03] flex items-center gap-2 transition-all">
+            <span class="material-symbols-outlined text-[18px]">route</span> Histórico de Corridas
+        </button>
+    </div>
+
     <!-- CORE CONTENT LAYOUT -->
-    <main class="flex-grow p-8 flex flex-col xl:flex-row gap-6 overflow-hidden">
+    <main class="flex-grow p-8 flex flex-col overflow-y-auto custom-scrollbar gap-6">
         
-        <!-- LEFT PANEL: STATS & DOCUMENT VERIFICATIONS -->
-        <section class="xl:w-[45%] flex flex-col gap-6 select-none overflow-y-auto pr-0 xl:pr-1 custom-scrollbar">
+        <!-- ==========================================
+             VIEW 1: OVERVIEW DASHBOARD (MAP & APPROVALS)
+             ========================================== -->
+        <div id="view-admin-overview" class="flex-grow flex flex-col xl:flex-row gap-6 shrink-0">
+            
+            <!-- LEFT PANEL: STATS & DOCUMENT VERIFICATIONS -->
+            <section class="xl:w-[45%] flex flex-col gap-6 select-none overflow-y-auto pr-0 xl:pr-1 custom-scrollbar">
             
             <!-- KPI METRIC CARDS GRID -->
             <div class="grid grid-cols-2 gap-4 shrink-0">
@@ -423,7 +447,182 @@
             </div>
             
         </section>
-        
+        </div> <!-- Close #view-admin-overview -->
+
+        <!-- ==========================================
+             VIEW 2: DRIVERS MANAGEMENT PANEL
+             ========================================== -->
+        <div id="view-admin-drivers" class="hidden flex-grow flex flex-col gap-6 animate-fade-in shrink-0">
+            <div class="glass-panel rounded-2xl p-6 flex flex-col gap-6">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-white font-extrabold text-lg flex items-center gap-2">
+                            <span class="material-symbols-outlined text-primary">local_taxi</span>
+                            Gerenciamento de Motoristas Parceiros
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-1">Monitore, aprove documentos e gerencie o status operacional dos motoristas.</p>
+                    </div>
+                </div>
+                
+                <!-- Table of drivers -->
+                <div class="overflow-x-auto no-scrollbar rounded-2xl border border-white/5 bg-zinc-950/30">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-white/[0.02] border-b border-white/5 text-slate-400 font-bold uppercase tracking-wider">
+                                <th class="p-4">Foto/ID</th>
+                                <th class="p-4">Motorista</th>
+                                <th class="p-4">WhatsApp</th>
+                                <th class="p-4">Veículo / Placa</th>
+                                <th class="p-4 text-center">Nota</th>
+                                <th class="p-4 text-center">CNH Approved</th>
+                                <th class="p-4 text-center">Res. Approved</th>
+                                <th class="p-4 text-center">Status Geral</th>
+                                <th class="p-4 text-center">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-drivers-table-body" class="divide-y divide-white/5 font-medium text-slate-350">
+                            <!-- Injected via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             VIEW 3: CLIENTS MANAGEMENT PANEL
+             ========================================== -->
+        <div id="view-admin-clients" class="hidden flex-grow flex flex-col gap-6 animate-fade-in shrink-0">
+            <div class="glass-panel rounded-2xl p-6 flex flex-col gap-6">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-white font-extrabold text-lg flex items-center gap-2">
+                            <span class="material-symbols-outlined text-primary">person</span>
+                            Base de Passageiros Cadastrados
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-1">Inspecione perfis, médias de avaliações e datas de integração de passageiros.</p>
+                    </div>
+                </div>
+                
+                <!-- Table of clients -->
+                <div class="overflow-x-auto no-scrollbar rounded-2xl border border-white/5 bg-zinc-950/30">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-white/[0.02] border-b border-white/5 text-slate-400 font-bold uppercase tracking-wider">
+                                <th class="p-4">Foto/ID</th>
+                                <th class="p-4">Passageiro</th>
+                                <th class="p-4">WhatsApp</th>
+                                <th class="p-4">E-mail</th>
+                                <th class="p-4 text-center">Nota</th>
+                                <th class="p-4 text-center">Data Cadastro</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-clients-table-body" class="divide-y divide-white/5 font-medium text-slate-350">
+                            <!-- Injected via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             VIEW 4: DYNAMIC PRICING MANAGER
+             ========================================== -->
+        <div id="view-admin-dynamics" class="hidden flex-grow flex flex-col gap-6 animate-fade-in shrink-0">
+            <div class="glass-panel rounded-2xl p-6 flex flex-col gap-6">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-white font-extrabold text-lg flex items-center gap-2">
+                            <span class="material-symbols-outlined text-primary">insights</span>
+                            Tarifação Dinâmica & Zonal
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-1">Gerencie multiplicadores de tarifa e taxas operacionais por zona de tráfego.</p>
+                    </div>
+                </div>
+                
+                <!-- Grid of dynamic zones -->
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6" id="admin-dynamics-grid-container">
+                    <!-- Injected via JS -->
+                </div>
+            </div>
+            
+            <!-- Dynamic Zone Edit Modal Drawer overlay -->
+            <div id="dynamic-edit-drawer" class="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-md hidden items-center justify-center p-4 transition-all duration-300 opacity-0" onclick="closeDynamicEditDrawer()">
+                <div class="relative max-w-md w-full bg-zinc-900 border border-white/10 p-6 rounded-3xl flex flex-col gap-4 shadow-2xl" onclick="event.stopPropagation()">
+                    <button class="absolute top-4 right-4 text-white/50 hover:text-white transition-colors" onclick="closeDynamicEditDrawer()">
+                        <span class="material-symbols-outlined text-[24px]">close</span>
+                    </button>
+                    <h3 class="text-white text-base font-extrabold flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">edit_square</span>
+                        Editar Tarifa Dinâmica: <span id="dyn-edit-title" class="text-primary font-black">Zona</span>
+                    </h3>
+                    <input type="hidden" id="dyn-edit-id"/>
+                    
+                    <div class="flex flex-col gap-4 mt-2">
+                        <div class="flex flex-col gap-1.5">
+                            <label class="text-[10px] font-bold text-slate-500 uppercase">Multiplicador Tarifário (x)</label>
+                            <input type="number" id="dyn-edit-multiplier" step="0.05" min="1.0" max="5.0" class="w-full h-11 bg-zinc-950 border border-white/5 rounded-xl text-white px-4 text-xs font-semibold focus:ring-0 focus:border-primary"/>
+                        </div>
+                        <div class="flex flex-col gap-1.5">
+                            <label class="text-[10px] font-bold text-slate-500 uppercase">Tarifa de Partiva (R$)</label>
+                            <input type="number" id="dyn-edit-base" step="0.50" min="0.00" class="w-full h-11 bg-zinc-950 border border-white/5 rounded-xl text-white px-4 text-xs font-semibold focus:ring-0 focus:border-primary"/>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="flex flex-col gap-1.5">
+                                <label class="text-[10px] font-bold text-slate-500 uppercase">Taxa por KM (R$)</label>
+                                <input type="number" id="dyn-edit-km" step="0.10" min="0.00" class="w-full h-11 bg-zinc-950 border border-white/5 rounded-xl text-white px-4 text-xs font-semibold focus:ring-0 focus:border-primary"/>
+                            </div>
+                            <div class="flex flex-col gap-1.5">
+                                <label class="text-[10px] font-bold text-slate-500 uppercase">Taxa por Minuto (R$)</label>
+                                <input type="number" id="dyn-edit-min" step="0.05" min="0.00" class="w-full h-11 bg-zinc-950 border border-white/5 rounded-xl text-white px-4 text-xs font-semibold focus:ring-0 focus:border-primary"/>
+                            </div>
+                        </div>
+                        
+                        <button class="w-full h-12 bg-primary hover:bg-primary-hover active:scale-[0.98] text-black font-extrabold rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-primary/10 mt-2" onclick="submitDynamicPricingUpdate()">
+                            Salvar Alterações
+                            <span class="material-symbols-outlined font-bold text-[18px]">save</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             VIEW 5: TRIP HISTORY TRACKER
+             ========================================== -->
+        <div id="view-admin-trips" class="hidden flex-grow flex flex-col gap-6 animate-fade-in shrink-0">
+            <div class="glass-panel rounded-2xl p-6 flex flex-col gap-6">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-white font-extrabold text-lg flex items-center gap-2">
+                            <span class="material-symbols-outlined text-primary">route</span>
+                            Histórico de Viagens Operacionais
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-1">Rastreie o histórico completo de corridas solicitadas, concluídas e canceladas.</p>
+                    </div>
+                </div>
+                
+                <!-- Table of trips -->
+                <div class="overflow-x-auto no-scrollbar rounded-2xl border border-white/5 bg-zinc-950/30">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-white/[0.02] border-b border-white/5 text-slate-400 font-bold uppercase tracking-wider">
+                                <th class="p-4">ID</th>
+                                <th class="p-4">Passageiro</th>
+                                <th class="p-4">Motorista Parceiro</th>
+                                <th class="p-4">Local de Embarque</th>
+                                <th class="p-4">Destino</th>
+                                <th class="p-4 text-center">Valor da Corrida</th>
+                                <th class="p-4 text-center">Status</th>
+                                <th class="p-4 text-center">Data / Hora</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-trips-table-body" class="divide-y divide-white/5 font-medium text-slate-350">
+                            <!-- Injected via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </main>
 
     <!-- Document Lightbox Modal -->
@@ -442,6 +641,47 @@
                 </button>
                 <button class="py-3 px-6 bg-zinc-800 hover:bg-zinc-700 active:scale-[0.98] text-white font-extrabold rounded-2xl transition-all" onclick="closeDocumentModal()">
                     Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- IMMERSIVE ADMIN PASSWORD LOGIN GATEWAY -->
+    <div id="admin-login-gate" class="fixed inset-0 z-[10000] flex items-center justify-center bg-[#090d16]/95 backdrop-blur-2xl transition-all duration-500 ease-out">
+        <div class="absolute inset-0 bg-gradient-to-tr from-[#ccff00]/5 via-transparent to-[#3b82f6]/5 -z-10"></div>
+        <div class="w-full max-w-[380px] bg-slate-900/60 backdrop-blur-md border border-white/5 p-8 rounded-3xl flex flex-col items-center shadow-2xl relative overflow-hidden">
+            <!-- Glow Accent -->
+            <div class="absolute -right-16 -top-16 w-32 h-32 bg-primary/10 rounded-full blur-2xl pointer-events-none"></div>
+            
+            <!-- Logo Brand -->
+            <div class="w-16 h-16 bg-primary text-black font-black flex items-center justify-center rounded-2xl text-3xl shadow-xl shadow-primary/20 transform rotate-6 border border-white/10 mb-4">
+                CJ
+            </div>
+            
+            <h2 class="text-white font-black text-xl tracking-tight mb-1">ChegoJá Admin Portal</h2>
+            <p class="text-slate-400 text-xs font-semibold uppercase tracking-widest text-primary mb-6">Restricted Area</p>
+            
+            <!-- Input and validations -->
+            <div class="w-full flex flex-col gap-4" id="login-form-container">
+                <div class="flex flex-col gap-1.5 w-full">
+                    <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Senha Operacional</label>
+                    <div class="flex items-center w-full h-12 bg-zinc-950 rounded-xl border border-white/5 px-4 gap-3 focus-within:border-primary focus-within:shadow-[0_0_0_1px_#ccff00] transition-all" id="password-input-wrapper">
+                        <span class="material-symbols-outlined text-[20px] text-slate-500">lock</span>
+                        <input class="flex-grow bg-transparent border-none text-sm text-white placeholder:text-slate-650 focus:ring-0 p-0 focus:border-none focus:outline-none" id="login-password-input" placeholder="••••••••••••" type="password" autocomplete="current-password" onkeydown="if(event.key === 'Enter') submitAdminPasswordAuthentication()"/>
+                        <button class="text-slate-500 hover:text-white transition-colors" onclick="toggleLoginPasswordVisibility()">
+                            <span class="material-symbols-outlined text-[20px]" id="password-visibility-icon">visibility</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Error text -->
+                <p class="text-[10px] text-accent-red font-bold text-center hidden animate-pulse" id="login-error-text">
+                    Senha incorreta! Tente novamente.
+                </p>
+                
+                <button class="w-full h-12 bg-primary hover:bg-primary-hover active:scale-[0.98] text-black font-extrabold rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-primary/10 mt-2" onclick="submitAdminPasswordAuthentication()">
+                    Autenticar Console
+                    <span class="material-symbols-outlined font-bold text-[18px]">verified_user</span>
                 </button>
             </div>
         </div>
