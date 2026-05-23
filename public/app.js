@@ -115,6 +115,12 @@ async function fetchAndRenderDrivers() {
     }
 }
 
+// --- Global Lightbox Modal State ---
+const modalState = {
+    driverId: null,
+    documentType: null
+};
+
 // 3. Render the dynamic approval list
 function renderApprovalQueue(drivers) {
     const container = document.getElementById('approval-list-container');
@@ -157,8 +163,8 @@ function renderApprovalQueue(drivers) {
                 <!-- CNH Preview Card -->
                 <div class="p-3 bg-zinc-900 rounded-xl border border-white/5 flex flex-col gap-2 relative group overflow-hidden">
                     <span class="text-[10px] text-slate-400 font-bold uppercase block">1. CNH com EAR</span>
-                    <div class="w-full aspect-[4/3] rounded-lg bg-zinc-800 flex items-center justify-center relative cursor-pointer overflow-hidden border border-white/5">
-                        <img alt="CNH Document Preview" class="w-full h-full object-cover group-hover:scale-105 transition-transform" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCQeYw6Q3w_B07-Yg-53R9m7TzJ3-mRzO8u16Gv5Z2z9vG2259z5Zz-5Zz5"/>
+                    <div class="w-full aspect-[4/3] rounded-lg bg-zinc-800 flex items-center justify-center relative cursor-pointer overflow-hidden border border-white/5" onclick="openDocumentModal('${cand.cnh_url || 'https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev/cnh-carlos.svg'}', 'CNH de ${cand.name}', ${cand.id}, 'cnh', ${cand.cnh_approved})">
+                        <img alt="CNH Document Preview" class="w-full h-full object-cover group-hover:scale-105 transition-transform" src="${cand.cnh_url || 'https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev/cnh-carlos.svg'}"/>
                     </div>
                     <div class="flex gap-2 mt-1">
                         ${!cand.cnh_approved ? `
@@ -176,8 +182,8 @@ function renderApprovalQueue(drivers) {
                 <!-- Residence Preview Card -->
                 <div class="p-3 bg-zinc-900 rounded-xl border border-white/5 flex flex-col gap-2 relative group overflow-hidden">
                     <span class="text-[10px] text-slate-400 font-bold uppercase block">2. Comprovante</span>
-                    <div class="w-full aspect-[4/3] rounded-lg bg-zinc-800 flex items-center justify-center relative cursor-pointer overflow-hidden border border-white/5">
-                        <img alt="Residence Document Preview" class="w-full h-full object-cover group-hover:scale-105 transition-transform" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCQeYw6Q3w_B07-Yg-53R9m7TzJ3-mRzO8u16Gv5Z2z9vG2259z5Zz-5Zz5"/>
+                    <div class="w-full aspect-[4/3] rounded-lg bg-zinc-800 flex items-center justify-center relative cursor-pointer overflow-hidden border border-white/5" onclick="openDocumentModal('${cand.res_url || 'https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev/comprovante-carlos.svg'}', 'Comprovante de ${cand.name}', ${cand.id}, 'res', ${cand.res_approved})">
+                        <img alt="Residence Document Preview" class="w-full h-full object-cover group-hover:scale-105 transition-transform" src="${cand.res_url || 'https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev/comprovante-carlos.svg'}"/>
                     </div>
                     <div class="flex gap-2 mt-1">
                         ${!cand.res_approved ? `
@@ -196,6 +202,62 @@ function renderApprovalQueue(drivers) {
         container.prepend(card);
     });
 }
+
+// ==========================================
+// DOCUMENT INSPECTION LIGHTBOX MODAL HANDLERS
+// ==========================================
+function openDocumentModal(url, title, driverId, documentType, isApproved) {
+    const modal = document.getElementById('document-modal');
+    const modalImg = document.getElementById('document-modal-img');
+    const modalTitle = document.getElementById('document-modal-title');
+    
+    if (!modal || !modalImg || !modalTitle) return;
+    
+    modalState.driverId = driverId;
+    modalState.documentType = documentType;
+    
+    modalImg.src = url;
+    modalTitle.textContent = title;
+    
+    // Hide/show the approve button inside modal depending on whether it's already approved
+    const approveBtn = modal.querySelector('button[onclick="approveCurrentDocumentFromModal()"]');
+    if (approveBtn) {
+        if (isApproved) {
+            approveBtn.classList.add('hidden');
+        } else {
+            approveBtn.classList.remove('hidden');
+        }
+    }
+    
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        modal.classList.add('opacity-100');
+    }, 10);
+}
+
+function closeDocumentModal() {
+    const modal = document.getElementById('document-modal');
+    if (!modal) return;
+    
+    modal.classList.remove('opacity-100');
+    modal.classList.add('opacity-0');
+    setTimeout(() => {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+    }, 300);
+}
+
+async function approveCurrentDocumentFromModal() {
+    if (!modalState.driverId || !modalState.documentType) return;
+    await approveDocument(modalState.driverId, modalState.documentType);
+    closeDocumentModal();
+}
+
+window.openDocumentModal = openDocumentModal;
+window.closeDocumentModal = closeDocumentModal;
+window.approveCurrentDocumentFromModal = approveCurrentDocumentFromModal;
 
 // 4. Submit document approval to server
 async function approveDocument(driverId, documentType) {

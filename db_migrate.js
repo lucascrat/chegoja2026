@@ -30,6 +30,8 @@ async function main() {
                 phone VARCHAR(20) NOT NULL,
                 cnh_approved BOOLEAN DEFAULT FALSE,
                 res_approved BOOLEAN DEFAULT FALSE,
+                cnh_url VARCHAR(255),
+                res_url VARCHAR(255),
                 overall_status VARCHAR(20) DEFAULT 'pending',
                 lat DOUBLE PRECISION DEFAULT -23.5616,
                 lng DOUBLE PRECISION DEFAULT -46.6560,
@@ -96,19 +98,94 @@ async function main() {
         // Seed Drivers (Candidates & Active)
         const driverSeeds = [
             // Candidates
-            { name: "Carlos Silva", phone: "11988887777", cnh_approved: false, res_approved: false, overall_status: "pending", lat: -23.5616, lng: -46.6560, active: false, avatar: "https://randomuser.me/api/portraits/men/32.jpg", rating: 5.00, vehicle_desc: "Chevrolet Onix Preto", vehicle_plate: "ABC-1234" },
-            { name: "Mariana Santos", phone: "11977776666", cnh_approved: false, res_approved: false, overall_status: "pending", lat: -23.5536, lng: -46.6530, active: false, avatar: "https://randomuser.me/api/portraits/women/44.jpg", rating: 5.00, vehicle_desc: "Hyundai HB20 Branco", vehicle_plate: "XYZ-9876" },
+            { 
+                name: "Carlos Silva", 
+                phone: "11988887777", 
+                cnh_approved: false, 
+                res_approved: false, 
+                cnh_url: "https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev/cnh-carlos.svg",
+                res_url: "https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev/comprovante-carlos.svg",
+                overall_status: "pending", 
+                lat: -23.5616, 
+                lng: -46.6560, 
+                active: false, 
+                avatar: "https://randomuser.me/api/portraits/men/32.jpg", 
+                rating: 5.00, 
+                vehicle_desc: "Chevrolet Onix Preto", 
+                vehicle_plate: "ABC-1234" 
+            },
+            { 
+                name: "Mariana Santos", 
+                phone: "11977776666", 
+                cnh_approved: false, 
+                res_approved: false, 
+                cnh_url: "https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev/cnh-mariana.svg",
+                res_url: "https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev/comprovante-mariana.svg",
+                overall_status: "pending", 
+                lat: -23.5536, 
+                lng: -46.6530, 
+                active: false, 
+                avatar: "https://randomuser.me/api/portraits/women/44.jpg", 
+                rating: 5.00, 
+                vehicle_desc: "Hyundai HB20 Branco", 
+                vehicle_plate: "XYZ-9876" 
+            },
             // Active
-            { name: "Renato Souza", phone: "11966665555", cnh_approved: true, res_approved: true, overall_status: "approved", lat: -23.5629, lng: -46.6540, active: true, avatar: "https://randomuser.me/api/portraits/men/85.jpg", rating: 4.80, vehicle_desc: "Toyota Corolla Preto", vehicle_plate: "RUN-8888" },
-            { name: "Patricia Lima", phone: "11955554444", cnh_approved: true, res_approved: true, overall_status: "approved", lat: -23.6273, lng: -46.6562, active: true, avatar: "https://randomuser.me/api/portraits/women/12.jpg", rating: 4.90, vehicle_desc: "Volkswagen Polo Prata", vehicle_plate: "CJX-1111" },
-            { name: "Ricardo Dias", phone: "11944443333", cnh_approved: true, res_approved: true, overall_status: "approved", lat: -23.5796, lng: -46.6666, active: true, avatar: "https://randomuser.me/api/portraits/men/50.jpg", rating: 4.70, vehicle_desc: "Nissan Versa Cinza", vehicle_plate: "CMT-3333" }
+            { 
+                name: "Renato Souza", 
+                phone: "11966665555", 
+                cnh_approved: true, 
+                res_approved: true, 
+                cnh_url: "https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev/cnh-carlos.svg",
+                res_url: "https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev/comprovante-carlos.svg",
+                overall_status: "approved", 
+                lat: -23.5629, 
+                lng: -46.6540, 
+                active: true, 
+                avatar: "https://randomuser.me/api/portraits/men/85.jpg", 
+                rating: 4.80, 
+                vehicle_desc: "Toyota Corolla Preto", 
+                vehicle_plate: "RUN-8888" 
+            },
+            { 
+                name: "Patricia Lima", 
+                phone: "11955554444", 
+                cnh_approved: true, 
+                res_approved: true, 
+                cnh_url: "https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev/cnh-mariana.svg",
+                res_url: "https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev/comprovante-mariana.svg",
+                overall_status: "approved", 
+                lat: -23.6273, 
+                lng: -46.6562, 
+                active: true, 
+                avatar: "https://randomuser.me/api/portraits/women/12.jpg", 
+                rating: 4.90, 
+                vehicle_desc: "Volkswagen Polo Prata", 
+                vehicle_plate: "CJX-1111" 
+            },
+            { 
+                name: "Ricardo Dias", 
+                phone: "11944443333", 
+                cnh_approved: true, 
+                res_approved: true, 
+                cnh_url: "https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev/cnh-carlos.svg",
+                res_url: "https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev/comprovante-carlos.svg",
+                overall_status: "approved", 
+                lat: -23.5796, 
+                lng: -46.6666, 
+                active: true, 
+                avatar: "https://randomuser.me/api/portraits/men/50.jpg", 
+                rating: 4.70, 
+                vehicle_desc: "Nissan Versa Cinza", 
+                vehicle_plate: "CMT-3333" 
+            }
         ];
 
         for (const dr of driverSeeds) {
             await client.query(`
-                INSERT INTO drivers (name, phone, cnh_approved, res_approved, overall_status, lat, lng, active, avatar, rating, vehicle_desc, vehicle_plate)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-            `, [dr.name, dr.phone, dr.cnh_approved, dr.res_approved, dr.overall_status, dr.lat, dr.lng, dr.active, dr.avatar, dr.rating, dr.vehicle_desc, dr.vehicle_plate]);
+                INSERT INTO drivers (name, phone, cnh_approved, res_approved, cnh_url, res_url, overall_status, lat, lng, active, avatar, rating, vehicle_desc, vehicle_plate)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            `, [dr.name, dr.phone, dr.cnh_approved, dr.res_approved, dr.cnh_url, dr.res_url, dr.overall_status, dr.lat, dr.lng, dr.active, dr.avatar, dr.rating, dr.vehicle_desc, dr.vehicle_plate]);
         }
         console.log("- Drivers seeded.");
 

@@ -2,10 +2,23 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const path = require('path');
+const multer = require('multer');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Configure Multer for processing file uploads in memory
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 50 * 1024 * 1024 } // 50MB file size limit
+});
+
+// Configure Cloudflare R2 (via direct REST API)
+const r2AccountId = process.env.R2_ACCOUNT_ID || "b94b59f6ac6870ef08ad4ea5384fc042";
+const r2Bucket = process.env.R2_BUCKET || "chegoja";
+const r2PublicUrl = process.env.R2_PUBLIC || "https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev";
+const r2Token = process.env.R2_TOKEN;
 
 // Enable CORS and JSON parsing
 app.use(cors());
@@ -13,6 +26,54 @@ app.use(express.json());
 
 // Serve static dashboard files from the "public" directory
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ==========================================
+// FILE UPLOAD TO CLOUDFLARE R2 ENDPOINT
+// ==========================================
+
+// 0. POST /api/upload - Stream file to Cloudflare R2 and return public CDN URL
+app.post('/api/upload', upload.single('file'), async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded. Please upload a file via multipart form under the field name 'file'." });
+    }
+
+    try {
+        const file = req.file;
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        const fileName = `${uniqueSuffix}${path.extname(file.originalname)}`;
+
+        const url = `https://api.cloudflare.com/client/v4/accounts/${r2AccountId}/r2/buckets/${r2Bucket}/objects/${fileName}`;
+
+        console.log(`[R2 UPLOAD] Streaming ${file.originalname} (mimetype: ${file.mimetype}) to Cloudflare REST API...`);
+        const uploadRes = await fetch(url, {
+            method: "PUT",
+            headers: {
+                "Authorization": `Bearer ${r2Token}`,
+                "Content-Type": file.mimetype
+            },
+            body: file.buffer
+        });
+
+        if (!uploadRes.ok) {
+            const errorText = await uploadRes.text();
+            throw new Error(`Cloudflare REST API responded with status ${uploadRes.status}: ${errorText}`);
+        }
+
+        const publicUrl = `${r2PublicUrl}/${fileName}`;
+
+        console.log(`[R2 UPLOAD] Successfully uploaded ${file.originalname} to R2 as ${fileName}. URL: ${publicUrl}`);
+
+        res.json({
+            success: true,
+            message: "File uploaded successfully to Cloudflare R2",
+            filename: fileName,
+            url: publicUrl
+        });
+    } catch (err) {
+        console.error("[R2 ERROR]", err);
+        res.status(500).json({ error: "Failed to upload file to Cloudflare R2: " + err.message });
+    }
+});
 
 // Connect to PostgreSQL using Pool
 const connectionString = process.env.DATABASE_URL || "postgres://chegoja_admin:Cj_2026_SecureDbPassword!@84.247.138.242:5439/chegoja_prod";
