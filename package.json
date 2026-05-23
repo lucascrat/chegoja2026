@@ -1,0 +1,16 @@
+{
+  "name": "chegoja-admin-panel",
+  "version": "1.0.0",
+  "description": "Professional Web Admin Dashboard for ChegoJá 2026 Mobilidade",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "migrate": "node db_migrate.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pg": "^8.11.5"
+  }
+}

@@ -1,0 +1,509 @@
+/* ==========================================
+   CHEGOJÁ - DESIGN SYSTEM & CSS GLOBALS
+   Based on DESIGN.md
+   ========================================== */
+
+/* Design Tokens */
+:root {
+  --primary: #506600;
+  --on-primary: #ffffff;
+  --primary-container: #ccff00;
+  --on-primary-container: #5b7300;
+  --inverse-primary: #abd600;
+  
+  --secondary: #5f5e5e;
+  --on-secondary: #ffffff;
+  --secondary-container: #e5e2e1;
+  --on-secondary-container: #656464;
+  
+  --tertiary: #515f74;
+  --on-tertiary: #ffffff;
+  --tertiary-container: #e4edff;
+  
+  --error: #ba1a1a;
+  --on-error: #ffffff;
+  --error-container: #ffdad6;
+  --on-error-container: #93000a;
+  
+  --background: #f7f9fb;
+  --on-background: #191c1e;
+  
+  --surface: #f7f9fb;
+  --on-surface: #191c1e;
+  --on-surface-variant: #444933;
+  --surface-dim: #d8dadc;
+  --surface-bright: #f7f9fb;
+  
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f2f4f6;
+  --surface-container: #eceef0;
+  --surface-container-high: #e6e8ea;
+  --surface-container-highest: #e0e3e5;
+  
+  --outline: #747a60;
+  --outline-variant: #c4c9ac;
+  
+  /* Elevamento e Sombras */
+  --shadow-level-1: 0px 8px 24px rgba(0, 0, 0, 0.06);
+  --shadow-level-2: 0px 12px 32px rgba(0, 0, 0, 0.12);
+  --shadow-inner: inset 0px 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+/* Dark Mode Tokens */
+.dark {
+  --background: #121212;
+  --on-background: #e0e3e5;
+  --surface: #1e1e1e;
+  --on-surface: #e0e3e5;
+  --on-surface-variant: #c4c9ac;
+  --surface-container-lowest: #141414;
+  --surface-container-low: #1c1c1c;
+  --surface-container: #242424;
+  --surface-container-high: #2c2c2c;
+  --surface-container-highest: #383838;
+  --outline-variant: #444933;
+}
+
+/* Reset de toque */
+.tap-highlight-transparent {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Otimização Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surface-container-highest);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--outline-variant);
+}
+
+/* Custom CSS base scroll behaviors for SPA views */
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background-color: #111827; /* Dark background behind device simulator on desktop */
+  overflow: hidden;
+}
+
+/* Estilos de Animação */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes slideLeft {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slideRight {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes pulseRing {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.08); opacity: 0.3; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+@keyframes pulseBorder {
+  0%, 100% { border-color: rgba(204, 255, 0, 0.4); }
+  50% { border-color: rgba(204, 255, 0, 1); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+.animate-slide-up { animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-slide-down { animation: slideDown 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-slide-left { animation: slideLeft 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-slide-right { animation: slideRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-pulse-ring { animation: pulseRing 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
+.animate-pulse-border { animation: pulseBorder 1.5s ease-in-out infinite; }
+
+.shimmer-bg {
+  background: linear-gradient(90deg, var(--surface-container-low) 25%, var(--surface-container-high) 50%, var(--surface-container-low) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+/* Glassmorphism Panels */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: var(--shadow-level-1);
+}
+.dark .glass-panel {
+  background: rgba(30, 30, 30, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0px 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+/* Custom styles for sheets */
+.bottom-sheet {
+  border-top-left-radius: 28px;
+  border-top-right-radius: 28px;
+  box-shadow: var(--shadow-level-2);
+}
+
+/* Leaflet Map Custom Sleek Theme */
+.leaflet-container {
+  background-color: var(--surface-container-low) !important;
+  font-family: inherit;
+}
+
+/* Filter to stylize standard Leaflet tiles to a high-end gray/modern look */
+.sleek-map .leaflet-tile-container {
+  filter: grayscale(1) invert(0.05) contrast(1.1) brightness(0.96) sepia(0.05);
+}
+.dark .sleek-map .leaflet-tile-container {
+  filter: grayscale(0.9) invert(0.9) contrast(1.1) brightness(0.85);
+}
+
+.leaflet-bar {
+  border: none !important;
+  box-shadow: var(--shadow-level-1) !important;
+}
+.leaflet-bar a {
+  background-color: var(--surface-container-lowest) !important;
+  color: var(--on-surface) !important;
+  border: 1px solid var(--surface-container) !important;
+  border-radius: 8px !important;
+  margin-bottom: 4px;
+}
+.leaflet-bar a:hover {
+  background-color: var(--surface-container-low) !important;
+}
+
+/* Hide zoom controls for native look */
+.native-map-controls .leaflet-control-zoom {
+  display: none !important;
+}
+
+/* Leaflet Icons */
+.custom-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.car-marker-icon {
+  background-color: var(--primary-container);
+  color: #121212;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0px 4px 10px rgba(0,0,0,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  transition: all 0.3s ease;
+}
+
+.location-marker-pickup {
+  background-color: #111827;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+  box-shadow: 0px 2px 6px rgba(0,0,0,0.3);
+}
+
+.location-marker-destination {
+  background-color: var(--primary);
+  border: 2px solid #ffffff;
+  width: 14px;
+  height: 14px;
+  box-shadow: 0px 2px 6px rgba(0,0,0,0.3);
+}
+
+/* ==========================================
+   DESKTOP SIMULATOR SHELL
+   Centering app in high fidelity phone frame
+   ========================================== */
+.simulator-container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  background-color: #0f172a;
+  overflow: hidden;
+}
+
+.simulator-info-sidebar {
+  flex: 1;
+  padding: 40px;
+  color: #94a3b8;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  max-width: 480px;
+  overflow-y: auto;
+  border-right: 1px solid #1e293b;
+  z-index: 10;
+}
+
+.simulator-info-sidebar h1 {
+  color: #ffffff;
+  font-size: 2.2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-bottom: 12px;
+}
+
+.simulator-device-viewport {
+  flex: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background-radial-gradient: circle, #1e293b 0%, #0f172a 100%;
+}
+
+/* Phone Frame */
+.phone-chassis {
+  position: relative;
+  width: 390px;
+  height: 820px;
+  background: #27272a;
+  border-radius: 52px;
+  padding: 12px;
+  box-shadow: 0px 25px 50px -12px rgba(0, 0, 0, 0.7), 
+              0 0 0 4px #3f3f46,
+              0 0 0 8px #18181b;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Android (Pixel) Shell toggle modifier */
+.phone-chassis.android {
+  border-radius: 40px;
+  box-shadow: 0px 25px 50px -12px rgba(0, 0, 0, 0.7), 
+              0 0 0 4px #52525b,
+              0 0 0 6px #18181b;
+}
+
+/* Screen */
+.phone-screen {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  background-color: var(--background);
+  border-radius: 42px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.phone-chassis.android .phone-screen {
+  border-radius: 32px;
+}
+
+/* Notch / Dynamic Island for iPhone */
+.phone-notch {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 110px;
+  height: 30px;
+  background-color: #000000;
+  border-radius: 20px;
+  z-index: 9999;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.phone-notch:hover {
+  width: 260px;
+}
+
+/* Camera Punch Hole for Android */
+.phone-chassis.android .phone-notch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  top: 14px;
+}
+
+/* Simulated Status Bar */
+.phone-status-bar {
+  height: 48px;
+  width: 100%;
+  background-color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  color: var(--on-background);
+  font-size: 13px;
+  font-weight: 600;
+  z-index: 999;
+  position: absolute;
+  top: 0;
+  pointer-events: none;
+}
+
+.phone-chassis.android .phone-status-bar {
+  height: 38px;
+  padding: 0 20px;
+}
+
+/* Simulated Home Indicator / Navigation Bar */
+.phone-home-indicator {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 130px;
+  height: 5px;
+  background-color: var(--on-background);
+  border-radius: 10px;
+  opacity: 0.8;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.phone-chassis.android .phone-home-indicator {
+  display: none;
+}
+
+/* Android Navigation buttons mock */
+.android-nav-bar {
+  display: none;
+  height: 48px;
+  background-color: #000000;
+  justify-content: space-around;
+  align-items: center;
+  color: #ffffff;
+  font-size: 18px;
+  z-index: 9999;
+  width: 100%;
+  flex-shrink: 0;
+  border-bottom-left-radius: 32px;
+  border-bottom-right-radius: 32px;
+}
+
+.phone-chassis.android .android-nav-bar {
+  display: flex;
+}
+
+/* Controls for swapping views */
+.simulator-controls {
+  position: absolute;
+  bottom: 24px;
+  display: flex;
+  gap: 16px;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(12px);
+  padding: 8px 16px;
+  border-radius: 30px;
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  z-index: 100;
+}
+
+.simulator-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.simulator-btn.active, .simulator-btn:hover {
+  background-color: var(--primary-container);
+  color: #121212;
+}
+
+/* ==========================================
+   MOBILE RESPONSIVENESS OVERRIDES
+   When on actual mobile screen, remove phone container
+   ========================================== */
+@media (max-width: 768px) {
+  .simulator-info-sidebar {
+    display: none;
+  }
+  
+  .simulator-container {
+    background-color: var(--background);
+  }
+  
+  .simulator-device-viewport {
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    flex: 1;
+  }
+  
+  .phone-chassis {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    border: none !important;
+  }
+  
+  .phone-screen {
+    border-radius: 0 !important;
+  }
+  
+  .phone-notch {
+    display: none;
+  }
+  
+  .phone-status-bar {
+    display: none; /* Let native OS status bar do the job */
+  }
+  
+  .phone-home-indicator {
+    display: none; /* Let native OS handle home bar */
+  }
+  
+  .android-nav-bar {
+    display: none !important; /* Hide fake navigation bar on actual phone view */
+  }
+  
+  .simulator-controls {
+    display: none; /* Hide simulator controls on real phones */
+  }
+}
