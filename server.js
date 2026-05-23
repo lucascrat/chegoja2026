@@ -79,8 +79,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 const connectionString = process.env.DATABASE_URL || "postgres://chegoja_admin:Cj_2026_SecureDbPassword!@84.247.138.242:5439/chegoja_prod";
 const pool = new Pool({
     connectionString,
-    // Add SSL configurations if deploying in secure environments
-    ssl: connectionString.includes('localhost') || connectionString.includes('127.0.0.1') ? false : { rejectUnauthorized: false }
+    ssl: false
 });
 
 pool.on('error', (err) => {
