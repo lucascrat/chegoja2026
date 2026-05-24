@@ -179,6 +179,8 @@ app.post('/api/drivers/approve', async (req, res) => {
         console.error(err);
         res.status(500).json({ error: "Failed to approve driver document." });
     }
+});
+
 // 3.5. POST /api/drivers/register - Register new driver or rider
 app.post('/api/drivers/register', async (req, res) => {
     const { name, phone, vehicle_desc, vehicle_plate, vehicle_type } = req.body;
