@@ -179,6 +179,46 @@ app.post('/api/drivers/approve', async (req, res) => {
         console.error(err);
         res.status(500).json({ error: "Failed to approve driver document." });
     }
+// 3.5. POST /api/drivers/register - Register new driver or rider
+app.post('/api/drivers/register', async (req, res) => {
+    const { name, phone, vehicle_desc, vehicle_plate, vehicle_type } = req.body;
+    
+    if (!name || !phone || !vehicle_desc || !vehicle_plate) {
+        return res.status(400).json({ error: "Name, phone, vehicle description, and plate are required." });
+    }
+
+    const type = vehicle_type === 'moto' ? 'moto' : 'carro';
+    
+    // Auto-generate high fidelity document placeholders based on vehicle type
+    const avatar = type === 'moto' ? 
+        `https://randomuser.me/api/portraits/men/${Math.floor(Math.random() * 50) + 50}.jpg` : 
+        `https://randomuser.me/api/portraits/men/${Math.floor(Math.random() * 50) + 1}.jpg`;
+        
+    const cnh_url = type === 'moto' ? 
+        "https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev/cnh-carlos.svg" : 
+        "https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev/cnh-mariana.svg";
+        
+    const res_url = "https://pub-f9009c0a0d1c42ee9e6eb41742ccf75f.r2.dev/comprovante-carlos.svg";
+
+    try {
+        const queryText = `
+            INSERT INTO drivers (name, phone, vehicle_desc, vehicle_plate, vehicle_type, avatar, cnh_url, res_url, overall_status, active, rating)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', false, 5.00)
+            RETURNING *
+        `;
+        const values = [name, phone, vehicle_desc, vehicle_plate, type, avatar, cnh_url, res_url];
+        const result = await pool.query(queryText, values);
+        
+        console.log(`[REGISTER] Registered new ${type}: ${name}`);
+        res.json({
+            success: true,
+            message: `Driver/Rider ${name} registered successfully.`,
+            driver: result.rows[0]
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to register driver/rider: " + err.message });
+    }
 });
 
 // 4. GET /api/trips - Retrieve all trips

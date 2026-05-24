@@ -340,9 +340,10 @@ function updateMapMarkers(drivers) {
     const active = drivers.filter(d => d.overall_status === 'approved' && d.active === true);
 
     active.forEach(loc => {
+        const iconName = loc.vehicle_type === 'moto' ? 'two_wheeler' : 'directions_car';
         const markerIcon = L.divIcon({
             className: 'custom-marker',
-            html: `<div class="w-8 h-8 rounded-full bg-slate-950 text-[#ccff00] border-2 border-[#ccff00] flex items-center justify-center shadow-lg car-pulse"><span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">directions_car</span></div>`,
+            html: `<div class="w-8 h-8 rounded-full bg-slate-950 text-[#ccff00] border-2 border-[#ccff00] flex items-center justify-center shadow-lg car-pulse"><span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">${iconName}</span></div>`,
             iconSize: [32, 32],
             iconAnchor: [16, 16]
         });
@@ -553,6 +554,71 @@ window.toggleLoginPasswordVisibility = toggleLoginPasswordVisibility;
 window.submitAdminPasswordAuthentication = submitAdminPasswordAuthentication;
 
 // ==========================================
+// DRIVER/RIDER REGISTRATION CONTROLLERS
+// ==========================================
+function openDriverRegistrationModal() {
+    const modal = document.getElementById("driver-registration-modal");
+    if (!modal) return;
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+    setTimeout(() => {
+        modal.style.opacity = "1";
+    }, 10);
+}
+
+function closeDriverRegistrationModal() {
+    const modal = document.getElementById("driver-registration-modal");
+    if (!modal) return;
+    modal.style.opacity = "0";
+    setTimeout(() => {
+        modal.classList.remove("flex");
+        modal.classList.add("hidden");
+        // Reset form
+        document.getElementById("driver-registration-form").reset();
+    }, 300);
+}
+
+async function submitDriverRegistration() {
+    const name = document.getElementById("reg-driver-name").value.trim();
+    const phone = document.getElementById("reg-driver-phone").value.trim();
+    const vehicle_desc = document.getElementById("reg-driver-vehicle-desc").value.trim();
+    const vehicle_plate = document.getElementById("reg-driver-vehicle-plate").value.trim();
+    
+    // Get checked radio value
+    const vehicle_type = document.querySelector('input[name="reg-driver-type"]:checked').value;
+    
+    try {
+        addServerLog('system', `Cadastrando novo condutor (${vehicle_type}): ${name}...`);
+        
+        const res = await fetch(`${API_BASE}/api/drivers/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, phone, vehicle_desc, vehicle_plate, vehicle_type })
+        });
+        
+        if (!res.ok) throw new Error("Status " + res.status);
+        const data = await res.json();
+        
+        if (data.success) {
+            AudioSynth.playSuccess();
+            addServerLog('db', `Sucesso: Novo ${vehicle_type === 'moto' ? 'piloto' : 'motorista'} #${data.driver.id} (${name}) cadastrado!`);
+            closeDriverRegistrationModal();
+            
+            // Refresh table and indicators
+            fetchAndRenderDriversTable();
+            fetchKPIs();
+        }
+    } catch (e) {
+        AudioSynth.playBuzzer();
+        addServerLog('alert', `Erro ao cadastrar condutor: ${e.message}`);
+    }
+}
+
+window.openDriverRegistrationModal = openDriverRegistrationModal;
+window.closeDriverRegistrationModal = closeDriverRegistrationModal;
+window.submitDriverRegistration = submitDriverRegistration;
+
+// ==========================================
 // TABS NAVIGATION CONTROLLERS
 // ==========================================
 function switchAdminTab(tabId) {
@@ -623,6 +689,10 @@ async function fetchAndRenderDriversTable() {
                 '<span class="material-symbols-outlined text-accent-green text-[18px]">verified</span>' : 
                 '<span class="material-symbols-outlined text-slate-650 text-[18px]">pending</span>';
 
+            const typeBadge = d.vehicle_type === 'moto' ? 
+                '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-accent-blue/10 text-accent-blue font-bold text-[9px] uppercase mt-0.5"><span class="material-symbols-outlined text-[10px]">two_wheeler</span> Piloto (Moto)</span>' :
+                '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold text-[9px] uppercase mt-0.5"><span class="material-symbols-outlined text-[10px]">directions_car</span> Motorista (Carro)</span>';
+
             const activeToggle = `
                 <label class="relative inline-flex items-center cursor-pointer select-none">
                     <input type="checkbox" class="sr-only peer" ${d.active ? 'checked' : ''} onchange="toggleDriverActiveState(${d.id}, this.checked)">
@@ -639,7 +709,11 @@ async function fetchAndRenderDriversTable() {
                 </td>
                 <td class="p-4 font-bold text-white text-sm">${d.name}</td>
                 <td class="p-4 font-mono text-slate-400">${d.phone}</td>
-                <td class="p-4 font-bold text-white">${d.vehicle_desc || 'S/V'} <span class="block text-[9px] font-bold text-slate-500 font-mono tracking-wider mt-0.5 uppercase">${d.vehicle_plate || 'Sem Placa'}</span></td>
+                <td class="p-4 font-bold text-white">
+                    ${d.vehicle_desc || 'S/V'} 
+                    <span class="block text-[9px] font-bold text-slate-500 font-mono tracking-wider mt-0.5 uppercase">${d.vehicle_plate || 'Sem Placa'}</span>
+                    <div class="mt-1">${typeBadge}</div>
+                </td>
                 <td class="p-4 text-center font-bold text-[#ccff00]">${parseFloat(d.rating || 5.0).toFixed(2)}</td>
                 <td class="p-4 text-center">${isCnhApproved}</td>
                 <td class="p-4 text-center">${isResApproved}</td>
