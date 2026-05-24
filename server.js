@@ -436,6 +436,56 @@ app.post('/api/drivers/update-docs', async (req, res) => {
     }
 });
 
+// 13. POST /api/drivers/update-location - Update active status and coordinates
+app.post('/api/drivers/update-location', async (req, res) => {
+    const { id, active, lat, lng } = req.body;
+    
+    if (!id) {
+        return res.status(400).json({ error: "Driver ID is required." });
+    }
+
+    try {
+        const queryText = `
+            UPDATE drivers 
+            SET active = COALESCE($2, active),
+                lat = COALESCE($3, lat),
+                lng = COALESCE($4, lng)
+            WHERE id = $1
+            RETURNING *
+        `;
+        const values = [id, active, lat, lng];
+        const result = await pool.query(queryText, values);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: "Driver not found." });
+        }
+
+        res.json({
+            success: true,
+            message: "Location/status updated successfully.",
+            driver: result.rows[0]
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to update location: " + err.message });
+    }
+});
+
+// 14. GET /api/drivers/online - Retrieve all online approved drivers
+app.get('/api/drivers/online', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT id, name, phone, vehicle_desc, vehicle_plate, vehicle_type, avatar, lat, lng, rating
+            FROM drivers
+            WHERE active = true AND overall_status = 'approved'
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch online drivers: " + err.message });
+    }
+});
+
 // Wildcard fallback to serve the static frontend
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
