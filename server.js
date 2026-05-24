@@ -253,7 +253,7 @@ app.get('/api/dynamics', async (req, res) => {
 
 // 6. POST /api/dynamics/update - Update dynamic multiplier/fares
 app.post('/api/dynamics/update', async (req, res) => {
-    const { id, multiplier, base_fare, rate_per_km, rate_per_minute } = req.body;
+    const { id, multiplier, base_fare, rate_per_km, rate_per_minute, start_time, end_time } = req.body;
 
     if (!id) {
         return res.status(400).json({ error: "Parameter 'id' is required." });
@@ -265,9 +265,11 @@ app.post('/api/dynamics/update', async (req, res) => {
             SET multiplier = COALESCE($2, multiplier),
                 base_fare = COALESCE($3, base_fare),
                 rate_per_km = COALESCE($4, rate_per_km),
-                rate_per_minute = COALESCE($5, rate_per_minute)
+                rate_per_minute = COALESCE($5, rate_per_minute),
+                start_time = COALESCE($6, start_time),
+                end_time = COALESCE($7, end_time)
             WHERE id = $1
-        `, [id, multiplier, base_fare, rate_per_km, rate_per_minute]);
+        `, [id, multiplier, base_fare, rate_per_km, rate_per_minute, start_time, end_time]);
 
         res.json({ success: true, message: "Dynamic pricing configuration updated successfully." });
     } catch (err) {

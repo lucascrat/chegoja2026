@@ -537,9 +537,9 @@
                     <div>
                         <h2 class="text-white font-extrabold text-lg flex items-center gap-2">
                             <span class="material-symbols-outlined text-primary">insights</span>
-                            Tarifação Dinâmica & Zonal
+                            Tarifação Dinâmica por Turnos (Carro / Moto)
                         </h2>
-                        <p class="text-xs text-slate-400 mt-1">Gerencie multiplicadores de tarifa e taxas operacionais por zona de tráfego.</p>
+                        <p class="text-xs text-slate-400 mt-1">Gerencie os horários de turnos e tarifas dinâmicas para Carros e Motos separadamente.</p>
                     </div>
                 </div>
                 
@@ -562,13 +562,25 @@
                     <input type="hidden" id="dyn-edit-id"/>
                     
                     <div class="flex flex-col gap-4 mt-2">
-                        <div class="flex flex-col gap-1.5">
-                            <label class="text-[10px] font-bold text-slate-500 uppercase">Multiplicador Tarifário (x)</label>
-                            <input type="number" id="dyn-edit-multiplier" step="0.05" min="1.0" max="5.0" class="w-full h-11 bg-zinc-950 border border-white/5 rounded-xl text-white px-4 text-xs font-semibold focus:ring-0 focus:border-primary"/>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="flex flex-col gap-1.5">
+                                <label class="text-[10px] font-bold text-slate-500 uppercase">Horário de Início</label>
+                                <input type="text" id="dyn-edit-start-time" placeholder="Ex: 06:00" class="w-full h-11 bg-zinc-950 border border-white/5 rounded-xl text-white px-4 text-xs font-semibold focus:ring-0 focus:border-primary"/>
+                            </div>
+                            <div class="flex flex-col gap-1.5">
+                                <label class="text-[10px] font-bold text-slate-500 uppercase">Horário de Término</label>
+                                <input type="text" id="dyn-edit-end-time" placeholder="Ex: 12:00" class="w-full h-11 bg-zinc-950 border border-white/5 rounded-xl text-white px-4 text-xs font-semibold focus:ring-0 focus:border-primary"/>
+                            </div>
                         </div>
-                        <div class="flex flex-col gap-1.5">
-                            <label class="text-[10px] font-bold text-slate-500 uppercase">Tarifa de Partiva (R$)</label>
-                            <input type="number" id="dyn-edit-base" step="0.50" min="0.00" class="w-full h-11 bg-zinc-950 border border-white/5 rounded-xl text-white px-4 text-xs font-semibold focus:ring-0 focus:border-primary"/>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="flex flex-col gap-1.5">
+                                <label class="text-[10px] font-bold text-slate-500 uppercase">Multiplicador Tarifário (x)</label>
+                                <input type="number" id="dyn-edit-multiplier" step="0.05" min="1.0" max="5.0" class="w-full h-11 bg-zinc-950 border border-white/5 rounded-xl text-white px-4 text-xs font-semibold focus:ring-0 focus:border-primary"/>
+                            </div>
+                            <div class="flex flex-col gap-1.5">
+                                <label class="text-[10px] font-bold text-slate-500 uppercase">Tarifa de Partida (R$)</label>
+                                <input type="number" id="dyn-edit-base" step="0.50" min="0.00" class="w-full h-11 bg-zinc-950 border border-white/5 rounded-xl text-white px-4 text-xs font-semibold focus:ring-0 focus:border-primary"/>
+                            </div>
                         </div>
                         <div class="grid grid-cols-2 gap-4">
                             <div class="flex flex-col gap-1.5">

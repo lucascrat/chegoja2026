@@ -785,22 +785,26 @@ async function fetchAndRenderDynamicsGrid() {
     try {
         const res = await fetch(`${API_BASE}/api/dynamics`);
         if (!res.ok) throw new Error("Status " + res.status);
-        const zones = await res.json();
+        const shifts = await res.json();
         
         const grid = document.getElementById('admin-dynamics-grid-container');
         if (!grid) return;
         grid.innerHTML = '';
         
-        zones.forEach(z => {
+        shifts.forEach(z => {
             const card = document.createElement('div');
             card.className = "glass-panel p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden animate-fade-in";
             
+            const catBadge = z.category === 'moto' ?
+                '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-accent-blue/10 text-accent-blue font-bold text-[9px] uppercase mt-1.5 inline-block"><span class="material-symbols-outlined text-[10px]">two_wheeler</span> Piloto (Moto)</span>' :
+                '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold text-[9px] uppercase mt-1.5 inline-block"><span class="material-symbols-outlined text-[10px]">directions_car</span> Motorista (Carro)</span>';
+
             card.innerHTML = `
                 <div class="absolute -right-4 -top-4 w-16 h-16 bg-[#ccff00]/5 rounded-full blur-xl"></div>
                 <div class="flex justify-between items-start mb-4">
                     <div>
                         <h4 class="text-white font-extrabold text-sm">${z.name}</h4>
-                        <span class="text-[9px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold uppercase tracking-wider mt-1.5 inline-block">Zona Operacional</span>
+                        ${catBadge}
                     </div>
                     <div class="w-10 h-10 rounded-xl bg-zinc-950 flex items-center justify-center border border-white/5">
                         <span class="material-symbols-outlined text-[20px] text-[#ccff00]">insights</span>
@@ -808,6 +812,10 @@ async function fetchAndRenderDynamicsGrid() {
                 </div>
                 
                 <div class="flex flex-col gap-2.5 mb-5 border-t border-white/5 pt-3">
+                    <div class="flex justify-between text-[10px] font-bold">
+                        <span class="text-slate-400">Horário do Turno:</span>
+                        <span class="text-white font-extrabold bg-white/5 px-2 py-0.5 rounded border border-white/5">${z.start_time} - ${z.end_time}</span>
+                    </div>
                     <div class="flex justify-between text-[10px] font-bold">
                         <span class="text-slate-400">Multiplicador Tarifário:</span>
                         <span class="text-[#ccff00] font-black">${parseFloat(z.multiplier).toFixed(2)}x</span>
@@ -826,7 +834,7 @@ async function fetchAndRenderDynamicsGrid() {
                     </div>
                 </div>
                 
-                <button class="w-full py-2.5 bg-primary hover:bg-primary-hover active:scale-[0.98] text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md shadow-primary/5" onclick="openDynamicEditDrawer(${z.id}, '${z.name}', ${z.multiplier}, ${z.base_fare}, ${z.rate_per_km}, ${z.rate_per_minute})">
+                <button class="w-full py-2.5 bg-primary hover:bg-primary-hover active:scale-[0.98] text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md shadow-primary/5" onclick="openDynamicEditDrawer(${z.id}, '${z.name}', ${z.multiplier}, ${z.base_fare}, ${z.rate_per_km}, ${z.rate_per_minute}, '${z.start_time}', '${z.end_time}')">
                     Editar Parâmetros
                     <span class="material-symbols-outlined text-[15px] font-bold">edit</span>
                 </button>
@@ -839,7 +847,7 @@ async function fetchAndRenderDynamicsGrid() {
 }
 
 // Dynamics modal actions
-function openDynamicEditDrawer(id, name, multiplier, baseFare, rateKm, rateMin) {
+function openDynamicEditDrawer(id, name, multiplier, baseFare, rateKm, rateMin, startTime, endTime) {
     const drawer = document.getElementById('dynamic-edit-drawer');
     if (!drawer) return;
     
@@ -849,6 +857,8 @@ function openDynamicEditDrawer(id, name, multiplier, baseFare, rateKm, rateMin) 
     document.getElementById('dyn-edit-base').value = baseFare;
     document.getElementById('dyn-edit-km').value = rateKm;
     document.getElementById('dyn-edit-min').value = rateMin;
+    document.getElementById('dyn-edit-start-time').value = startTime || '06:00';
+    document.getElementById('dyn-edit-end-time').value = endTime || '12:00';
     
     drawer.classList.remove('hidden');
     drawer.classList.add('flex');
@@ -872,6 +882,8 @@ function closeDynamicEditDrawer() {
 
 async function submitDynamicPricingUpdate() {
     const id = document.getElementById('dyn-edit-id').value;
+    const startTime = document.getElementById('dyn-edit-start-time').value.trim();
+    const endTime = document.getElementById('dyn-edit-end-time').value.trim();
     const multiplier = parseFloat(document.getElementById('dyn-edit-multiplier').value);
     const baseFare = parseFloat(document.getElementById('dyn-edit-base').value);
     const rateKm = parseFloat(document.getElementById('dyn-edit-km').value);
@@ -886,7 +898,9 @@ async function submitDynamicPricingUpdate() {
                 multiplier,
                 base_fare: baseFare,
                 rate_per_km: rateKm,
-                rate_per_minute: rateMin
+                rate_per_minute: rateMin,
+                start_time: startTime,
+                end_time: endTime
             })
         });
         
@@ -895,7 +909,7 @@ async function submitDynamicPricingUpdate() {
         
         if (data.success) {
             AudioSynth.playSuccess();
-            addServerLog('db', `Tarifa dinâmica da zona #${id} atualizada com sucesso.`);
+            addServerLog('db', `Tarifa dinâmica do turno #${id} atualizada com sucesso.`);
             closeDynamicEditDrawer();
             fetchAndRenderDynamicsGrid();
         }
