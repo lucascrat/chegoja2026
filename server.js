@@ -363,6 +363,79 @@ app.post('/api/places/load', (req, res) => {
     res.json({ success: true, city, places });
 });
 
+// 11. GET /api/drivers/search - Find driver by phone number
+app.get('/api/drivers/search', async (req, res) => {
+    const { phone } = req.query;
+    if (!phone) {
+        return res.status(400).json({ error: "Phone number is required." });
+    }
+    
+    // Normalize phone input (digits only)
+    const cleanPhone = phone.replace(/\D/g, '');
+
+    try {
+        const result = await pool.query("SELECT * FROM drivers WHERE regexp_replace(phone, '\\D', '', 'g') = $1", [cleanPhone]);
+        
+        if (result.rows.length === 0) {
+            return res.json({ found: false });
+        }
+        
+        res.json({ found: true, driver: result.rows[0] });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to search driver: " + err.message });
+    }
+});
+
+// 12. POST /api/drivers/update-docs - Update driver documents URLs and reset approvals
+app.post('/api/drivers/update-docs', async (req, res) => {
+    const { id, cnh_url, res_url } = req.body;
+    
+    if (!id) {
+        return res.status(400).json({ error: "Driver ID is required." });
+    }
+
+    try {
+        let queryText = "UPDATE drivers SET ";
+        const values = [id];
+        let paramIndex = 2;
+
+        if (cnh_url) {
+            queryText += `cnh_url = $${paramIndex}, cnh_approved = false, `;
+            values.push(cnh_url);
+            paramIndex++;
+        }
+        if (res_url) {
+            queryText += `res_url = $${paramIndex}, res_approved = false, `;
+            values.push(res_url);
+            paramIndex++;
+        }
+
+        // Reset overall status to pending since documents changed
+        queryText += `overall_status = 'pending', active = false WHERE id = $1 RETURNING *`;
+        
+        // Remove trailing comma if exists before overall_status
+        queryText = queryText.replace(', overall_status', 'overall_status');
+        queryText = queryText.replace(', active = false', ', active = false');
+
+        const result = await pool.query(queryText, values);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: "Driver not found." });
+        }
+
+        console.log(`[DOCS] Updated documents for driver ID ${id}`);
+        res.json({
+            success: true,
+            message: "Driver documents updated successfully. Pending new approval.",
+            driver: result.rows[0]
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to update driver documents: " + err.message });
+    }
+});
+
 // Wildcard fallback to serve the static frontend
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
