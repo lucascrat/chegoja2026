@@ -1,0 +1,24 @@
+# ============================================================
+# ChegoJá - Painel Admin Web (painelchegoja.appbr.pro)
+# Build: Vite com VITE_APP_ROLE=admin | Serve: nginx
+# Usado pelo Coolify (Build Pack: Dockerfile, arquivo: Dockerfile.admin)
+# ============================================================
+
+FROM node:20-alpine AS build
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci || npm install
+
+COPY . .
+
+# Força o papel admin no build (tela de login vai direto para Área Administrativa)
+ENV VITE_APP_ROLE=admin
+ENV VITE_DEV_AUTO_LOGIN=false
+RUN npx vite build
+
+FROM nginx:alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.admin.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
