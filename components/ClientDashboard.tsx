@@ -8,6 +8,7 @@ import { AppMap } from './AppMap';
 import { RideStatusOverlay } from './RideStatusOverlay';
 import { sendNotification } from '../services/notificationSender';
 import { RewardsHub } from './RewardsHub';
+import { searchAddresses, reverseGeocode, getDistance } from '../services/mapboxService';
 
 interface ClientDashboardProps {
     currentUser: UserProfile;
@@ -63,13 +64,11 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
 
         // Update current location
         if (navigator.geolocation && (!currentAddress || currentAddress === 'Obtendo localização...')) {
-            navigator.geolocation.getCurrentPosition((pos) => {
+            navigator.geolocation.getCurrentPosition(async (pos) => {
                 setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-                if (window.google && !isManualOrigin.current) {
-                    const geocoder = new window.google.maps.Geocoder();
-                    geocoder.geocode({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }, (results: any, status: any) => {
-                        if (status === 'OK' && results[0]) setCurrentAddress(results[0].formatted_address);
-                    });
+                if (!isManualOrigin.current) {
+                    const addr = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+                    if (addr) setCurrentAddress(addr);
                 }
             });
         }
@@ -90,10 +89,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     const [destination, setDestination] = useState<{ lat: number, lng: number, address: string } | null>(null);
     const [recentAddresses, setRecentAddresses] = useState<any[]>([]); // Histórico de endereços
     const isManualOrigin = useRef(false);
-    const [estimates, setEstimates] = useState<{ car: number, moto: number, distance: number, time: number } | null>(null);
+    const [estimates, setEstimates] = useState<{ car: number, motorcycle: number, distance: number, time: number } | null>(null);
     const [paymentMethod, setPaymentMethod] = useState<'cash' | 'pix' | 'card' | 'coins'>('cash');
-
-    const googleService = useRef<any>(null);
 
     // ... calculatePrices logic restored ...
     const calculatePrices = (distanceKm: number, timeMin: number) => {
@@ -165,21 +162,12 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     };
 
     const updateEstimates = async (dest: { lat: number, lng: number }) => {
-        if (!userLocation || !window.google) return;
-        const service = new window.google.maps.DistanceMatrixService();
-        service.getDistanceMatrix({
-            origins: [userLocation],
-            destinations: [dest],
-            travelMode: window.google.maps.TravelMode.DRIVING,
-        }, (response: any, status: string) => {
-            if (status === 'OK' && response.rows[0].elements[0].status === 'OK') {
-                const element = response.rows[0].elements[0];
-                const distanceKm = element.distance.value / 1000;
-                const timeMin = element.duration.value / 60;
-                const calculated = calculatePrices(distanceKm, timeMin);
-                setEstimates(calculated);
-            }
-        });
+        if (!userLocation) return;
+        const result = await getDistance(userLocation, dest);
+        if (result) {
+            const calculated = calculatePrices(result.distanceKm, result.durationMins);
+            setEstimates(calculated);
+        }
     };
 
     useEffect(() => {
@@ -220,14 +208,12 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             .subscribe();
 
         if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition((pos) => {
+            navigator.geolocation.getCurrentPosition(async (pos) => {
                 setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-                // Simple reverse geocode for current location if not manual
-                if (window.google && !isManualOrigin.current) {
-                    const geocoder = new window.google.maps.Geocoder();
-                    geocoder.geocode({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }, (results: any, status: any) => {
-                        if (status === 'OK' && results[0]) setCurrentAddress(results[0].formatted_address);
-                    });
+                // Reverse geocode da localização atual se não for manual
+                if (!isManualOrigin.current) {
+                    const addr = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+                    if (addr) setCurrentAddress(addr);
                 }
             });
         }
@@ -242,18 +228,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
         };
     }, [currentUser.id]);
 
-    // Initialize Google Autocomplete Service
-    useEffect(() => {
-        const interval = setInterval(() => {
-            if (window.google && window.google.maps && window.google.maps.places) {
-                googleService.current = new window.google.maps.places.AutocompleteService();
-                clearInterval(interval);
-            }
-        }, 500);
-        return () => clearInterval(interval);
-    }, []);
-
-    // Function to search addresses (Google + History)
+    // Function to search addresses (Mapbox + Histórico)
     const handleSearch = async (query: string, field: 'origin' | 'destination') => {
         if (field === 'destination') setDestinationText(query);
         else setCurrentAddress(query);
@@ -265,7 +240,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
 
         setActiveField(field);
 
-        // 1. Search in History (Supabase RPC)
+        // 1. Busca no histórico (Supabase RPC)
         const { data: historyData } = await supabase.rpc('search_address_history', { p_query: query });
         const historySuggestions = (historyData || []).map((item: any) => ({
             description: item.address,
@@ -274,22 +249,17 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             location: { lat: item.lat, lng: item.lng }
         }));
 
-        // 2. Search in Google
-        if (googleService.current) {
-            googleService.current.getPlacePredictions({
-                input: query,
-                componentRestrictions: { country: 'br' }, // Optional: restrict to Brazil
-                location: userLocation ? new window.google.maps.LatLng(userLocation.lat, userLocation.lng) : undefined,
-                radius: 50000, // 50km radius bias
-            }, (predictions: any, status: any) => {
-                const googleSuggestions = (status === 'OK' && predictions) ? predictions : [];
+        // 2. Busca no Mapbox (já retorna coordenadas)
+        const mapboxResults = await searchAddresses(query, userLocation || undefined);
+        const mapboxSuggestions = mapboxResults.map((r) => ({
+            description: r.description,
+            place_id: r.placeId,
+            isHistory: false,
+            location: r.location,
+        }));
 
-                // Merge: History first, then Google
-                setSuggestions([...historySuggestions, ...googleSuggestions]);
-            });
-        } else {
-            setSuggestions(historySuggestions);
-        }
+        // Mescla: histórico primeiro, depois Mapbox
+        setSuggestions([...historySuggestions, ...mapboxSuggestions]);
     };
 
     // Handle Selection
@@ -319,19 +289,11 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             }).then();
         };
 
-        if (item.isHistory) {
+        // Tanto histórico quanto Mapbox já trazem as coordenadas prontas
+        if (item.location) {
             updateLocation(item.location.lat, item.location.lng, item.description);
         } else {
-            // Fetch Details from Google
-            const geocoder = new window.google.maps.Geocoder();
-            geocoder.geocode({ placeId: item.place_id }, (results: any, status: any) => {
-                if (status === 'OK' && results[0]) {
-                    const loc = results[0].geometry.location;
-                    updateLocation(loc.lat(), loc.lng(), item.description);
-                } else {
-                    notify("Erro ao buscar detalhes do endereço.");
-                }
-            });
+            notify("Erro ao buscar detalhes do endereço.");
         }
     };
 
@@ -359,7 +321,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                 return;
             }
 
-            let originalPrice = type === 'car' ? (estimates?.car || settings?.car_base_price || 0) : (estimates?.moto || settings?.moto_base_price || 0);
+            let originalPrice = type === 'car' ? (estimates?.car || settings?.car_base_price || 0) : (estimates?.motorcycle || settings?.moto_base_price || 0);
             let finalPrice = originalPrice;
             let discountAmount = 0;
 
@@ -400,6 +362,12 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                 discount_amount: discountAmount
             });
 
+            if (dbError) {
+                console.error("[RideRequest] DB Error:", dbError);
+                notify(`Erro ao criar corrida: ${dbError}`);
+                return;
+            }
+
             if (newRide) {
                 setActiveRide(newRide);
 
@@ -425,7 +393,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                     setSelectedCoupon(null);
                 }
             } else {
-                notify(`Erro no servidor: ${dbError || 'Sem resposta'}`);
+                notify(`Erro no servidor: Sem resposta do banco.`);
             }
         } catch (err: any) {
             console.error("[RideRequest] Crash:", err);
@@ -632,16 +600,12 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                                     onClick={() => {
                                                         if (navigator.geolocation) {
                                                             setCurrentAddress('Atualizando...');
-                                                            navigator.geolocation.getCurrentPosition((pos) => {
+                                                            navigator.geolocation.getCurrentPosition(async (pos) => {
                                                                 setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-                                                                if (window.google) {
-                                                                    const geocoder = new window.google.maps.Geocoder();
-                                                                    geocoder.geocode({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }, (results: any, status: any) => {
-                                                                        if (status === 'OK' && results[0]) {
-                                                                            setCurrentAddress(results[0].formatted_address);
-                                                                            isManualOrigin.current = false;
-                                                                        }
-                                                                    });
+                                                                const addr = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+                                                                if (addr) {
+                                                                    setCurrentAddress(addr);
+                                                                    isManualOrigin.current = false;
                                                                 }
                                                             });
                                                         }

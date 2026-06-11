@@ -6,6 +6,7 @@ import { AudioMessage } from './AudioMessage';
 import { sendMessage, generateUUID, uploadFile, supabase, updateUserLocation, markMessagesAsRead, deleteMessageForEveryone } from '../services/supabaseClient';
 import { generateSmartReply, analyzeImage } from '../services/geminiService';
 import { soundService } from '../services/soundService';
+import { staticMapUrl } from '../services/mapboxService';
 // import { AdBanner } from './AdBanner'; // Removido por não existir
 import { Taximeter } from './Taximeter';
 
@@ -545,20 +546,21 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ currentUser, chatPartner
     setIsProcessingAI(false);
   };
 
-  // Helper to extract Lat/Lng from Google Maps Link for Static Preview
+  // Extrai lat/lng do link de localização e gera o preview estático via Mapbox
   const getStaticMapUrl = (url: string) => {
     try {
-      // Extracts lat,lng from "query=lat,lng"
       const urlObj = new URL(url);
       const query = urlObj.searchParams.get('query');
       if (query) {
-        const apiKey = "AIzaSyBKv8TAp-RpKMYfWrKyeXhnL6pq-pL8DBg";
-        return `https://maps.googleapis.com/maps/api/staticmap?center=${query}&zoom=15&size=400x200&maptype=roadmap&markers=color:red%7C${query}&key=${apiKey}`;
+        const [lat, lng] = query.split(',').map(Number);
+        if (!isNaN(lat) && !isNaN(lng)) {
+          return staticMapUrl(lat, lng, { zoom: 15, width: 400, height: 200 });
+        }
       }
     } catch (e) {
       console.warn("Could not parse location URL for preview", e);
     }
-    return 'https://maps.googleapis.com/maps/api/staticmap?center=0,0&zoom=1&size=200x150&sensor=false&key=AIzaSyBKv8TAp-RpKMYfWrKyeXhnL6pq-pL8DBg';
+    return staticMapUrl(0, 0, { zoom: 1, width: 200, height: 150, marker: false });
   };
 
   if (!chatPartner) return null;

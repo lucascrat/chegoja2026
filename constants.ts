@@ -22,6 +22,9 @@ export const EFI_CLIENT_SECRET = "Client_Secret_d0d7f2cbefe1cdc6f658ebc82f5553b7
 
 export const GOOGLE_MAPS_API_KEY = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || '';
 
+// MAPBOX CONFIG — substitui o Google Maps em todo o app (mapa interativo, geocoding, rotas e mapa estático)
+export const MAPBOX_TOKEN = (import.meta as any).env?.VITE_MAPBOX_TOKEN || '';
+
 export const DRIVER_PLANS = [
     {
         id: 'plan_24h',

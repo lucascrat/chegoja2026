@@ -46,8 +46,12 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
     const timerRef = useRef<any>(null);
     const gpsRef = useRef<number | null>(null);
 
-    // Day earnings (mock - would come from backend in production)
+    // Day earnings — synced from profile (updated by App.tsx via subscribeToProfiles)
     const [dayEarnings, setDayEarnings] = useState(currentUser.financial_balance || 0);
+
+    useEffect(() => {
+        setDayEarnings(currentUser.financial_balance || 0);
+    }, [currentUser.financial_balance]);
 
     useEffect(() => {
         fetchAppSettings().then(setSettings);
@@ -260,7 +264,7 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
     const isOnline = currentUser.status === DriverStatus.AVAILABLE;
 
     return (
-        <div className="h-full flex flex-col bg-[#0a0f14] relative overflow-hidden">
+        <div className="flex-1 w-full h-full flex flex-col bg-[#0a0f14] relative overflow-hidden">
             {/* Chat Overlay */}
             {showChat && chatContact && (
                 <div className="absolute inset-0 z-[100] bg-whatsapp-dark">
@@ -372,9 +376,8 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
             {/* Map */}
             <div className="flex-1 relative">
                 <AppMap
-                    driverLocation={driverLocation || undefined}
-                    showDriverMarker={true}
-                    centerOnDriver={true}
+                    drivers={[]}
+                    userLocation={driverLocation || undefined}
                 />
 
                 {/* Floating Status Toggle */}

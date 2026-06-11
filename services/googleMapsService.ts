@@ -1,5 +1,9 @@
-
-import { GOOGLE_MAPS_API_KEY } from '../constants';
+// ============================================================================
+// Serviço de rotas para o Bot de WhatsApp (server-side / Node).
+// Migrado para Mapbox — mantém o nome/forma da API antiga (GoogleMapsService)
+// para não quebrar os imports existentes em whatsappBot.ts.
+// ============================================================================
+import { geocodeAddress, getRoute } from './mapboxService';
 
 interface RouteInfo {
     distanceKm: number;
@@ -9,42 +13,30 @@ interface RouteInfo {
 }
 
 export const GoogleMapsService = {
-    // Calculate distance between two text addresses
+    // Calcula a rota entre dois endereços em texto (origem → destino)
     calculateRoute: async (origin: string, destination: string): Promise<RouteInfo | null> => {
-        if (!GOOGLE_MAPS_API_KEY) {
-            console.warn("GOOGLE_MAPS_API_KEY not set. Using mock distance.");
-            // Mock for testing without billing
-            return {
-                distanceKm: 5.5,
-                durationMins: 12,
-                startAddress: origin,
-                endAddress: destination
-            };
-        }
-
         try {
-            // Using Distance Matrix API (Server-side compatible usually, but here client-side fetch)
-            // Note: In a real production app, this should be proxied to avoid exposing key if not restricted.
-            // However, this is running in a Node.js context (WAHA Bot), so it is safer than browser.
-            const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origin)}&destinations=${encodeURIComponent(destination)}&key=${GOOGLE_MAPS_API_KEY}&language=pt-BR`;
+            const [o, d] = await Promise.all([
+                geocodeAddress(origin),
+                geocodeAddress(destination),
+            ]);
 
-            const response = await fetch(url);
-            const data = await response.json();
-
-            if (data.status === 'OK' && data.rows[0].elements[0].status === 'OK') {
-                const element = data.rows[0].elements[0];
-                return {
-                    distanceKm: element.distance.value / 1000,
-                    durationMins: Math.ceil(element.duration.value / 60),
-                    startAddress: data.origin_addresses[0],
-                    endAddress: data.destination_addresses[0]
-                };
+            if (!o || !d) {
+                console.warn('Mapbox: não foi possível geocodificar origem/destino.');
+                return null;
             }
 
-            console.error("Maps API Error:", data);
-            return null;
+            const route = await getRoute(o.location, d.location);
+            if (!route) return null;
+
+            return {
+                distanceKm: route.distanceKm,
+                durationMins: Math.ceil(route.durationMins),
+                startAddress: o.address,
+                endAddress: d.address,
+            };
         } catch (error) {
-            console.error("Maps Fetch Error:", error);
+            console.error('Mapbox calculateRoute error:', error);
             return null;
         }
     }

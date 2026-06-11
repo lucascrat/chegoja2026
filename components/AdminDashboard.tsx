@@ -12,6 +12,7 @@ import { sendNotification } from '../services/notificationSender'; // FCM Push N
 
 import { WhatsappBot } from '../services/whatsappBot'; // Importar Bot WhatsApp
 import { WahaService } from '../services/wahaService'; // Importar WahaService
+import { ensureMapbox, searchAddresses, getRoute, AddressSuggestion } from '../services/mapboxService';
 
 interface AdminDashboardProps {
     currentUser: UserProfile;
@@ -140,9 +141,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [isLoadingDrivers, setIsLoadingDrivers] = useState(false);
 
-    // Refs for dispatch autocomplete
-    const dispatchOriginInputRef = useRef<HTMLInputElement>(null);
-    const dispatchDestInputRef = useRef<HTMLInputElement>(null);
+    // Sugestões de autocomplete do despacho (Mapbox)
+    const [dispatchOriginSuggestions, setDispatchOriginSuggestions] = useState<AddressSuggestion[]>([]);
+    const [dispatchDestSuggestions, setDispatchDestSuggestions] = useState<AddressSuggestion[]>([]);
 
 
     // Bot State
@@ -281,56 +282,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
         }
     }, [activeTab]);
 
-    // Central Dispatch - Google Places Autocomplete
-    useEffect(() => {
-        if (activeTab === 'central' && window.google && window.google.maps) {
-            // Init Autocomplete for Origin
-            if (dispatchOriginInputRef.current) {
-                const originAutocomplete = new window.google.maps.places.Autocomplete(dispatchOriginInputRef.current, {
-                    fields: ["formatted_address", "geometry", "name"],
-                    componentRestrictions: { country: "br" },
-                });
-                originAutocomplete.addListener("place_changed", () => {
-                    const place = originAutocomplete.getPlace();
-                    if (place.geometry && place.geometry.location) {
-                        setDispatchOriginCoords({
-                            lat: place.geometry.location.lat(),
-                            lng: place.geometry.location.lng()
-                        });
-                    }
-                    if (place.formatted_address) {
-                        setDispatchOriginAddress(place.formatted_address);
-                    } else if (place.name) {
-                        setDispatchOriginAddress(place.name);
-                    }
-                    setDispatchPrice(null); // Reset price when address changes
-                });
-            }
-
-            // Init Autocomplete for Destination
-            if (dispatchDestInputRef.current) {
-                const destAutocomplete = new window.google.maps.places.Autocomplete(dispatchDestInputRef.current, {
-                    fields: ["formatted_address", "geometry", "name"],
-                    componentRestrictions: { country: "br" },
-                });
-                destAutocomplete.addListener("place_changed", () => {
-                    const place = destAutocomplete.getPlace();
-                    if (place.geometry && place.geometry.location) {
-                        setDispatchDestCoords({
-                            lat: place.geometry.location.lat(),
-                            lng: place.geometry.location.lng()
-                        });
-                    }
-                    if (place.formatted_address) {
-                        setDispatchDestAddress(place.formatted_address);
-                    } else if (place.name) {
-                        setDispatchDestAddress(place.name);
-                    }
-                    setDispatchPrice(null); // Reset price when address changes
-                });
-            }
-        }
-    }, [activeTab]);
+    // Central Dispatch - Autocomplete via Mapbox
+    const handleDispatchOriginChange = async (text: string) => {
+        setDispatchOriginAddress(text);
+        setDispatchOriginCoords(null);
+        setDispatchPrice(null);
+        setDispatchOriginSuggestions(text.length >= 3 ? await searchAddresses(text) : []);
+    };
+    const handleDispatchDestChange = async (text: string) => {
+        setDispatchDestAddress(text);
+        setDispatchDestCoords(null);
+        setDispatchPrice(null);
+        setDispatchDestSuggestions(text.length >= 3 ? await searchAddresses(text) : []);
+    };
+    const pickDispatchOrigin = (s: AddressSuggestion) => {
+        setDispatchOriginAddress(s.description);
+        setDispatchOriginCoords(s.location);
+        setDispatchOriginSuggestions([]);
+        setDispatchPrice(null);
+    };
+    const pickDispatchDest = (s: AddressSuggestion) => {
+        setDispatchDestAddress(s.description);
+        setDispatchDestCoords(s.location);
+        setDispatchDestSuggestions([]);
+        setDispatchPrice(null);
+    };
 
     // Load drivers and history when central tab is active
     useEffect(() => {
@@ -368,29 +344,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
         setDispatchPrice(null);
 
         try {
-            if (!window.google || !window.google.maps) {
-                alert("Google Maps ainda não foi carregado.");
-                setIsCalculatingPrice(false);
-                return;
-            }
-
-            const directionsService = new window.google.maps.DirectionsService();
-
-            directionsService.route(
-                {
-                    origin: dispatchOriginCoords,
-                    destination: dispatchDestCoords,
-                    travelMode: window.google.maps.TravelMode.DRIVING,
-                    unitSystem: window.google.maps.UnitSystem.METRIC
-                },
-                (result: any, status: any) => {
-                    if (status === window.google.maps.DirectionsStatus.OK && result) {
-                        const leg = result.routes[0].legs[0];
-                        const distanceMeters = leg.distance.value;
-                        const durationSeconds = leg.duration.value;
-
-                        const distanceKm = distanceMeters / 1000;
-                        const durationMin = durationSeconds / 60;
+            const route = await getRoute(dispatchOriginCoords, dispatchDestCoords);
+            if (route) {
+                        const distanceKm = route.distanceKm;
+                        const durationMin = route.durationMins;
 
                         // Calculate Price based on vehicle type and time
                         const now = new Date();
@@ -459,13 +416,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                             distanceKm,
                             durationMin
                         });
-                    } else {
-                        console.error("Directions request failed:", status);
-                        alert("Não foi possível calcular a rota. Verifique os endereços.");
-                    }
-                    setIsCalculatingPrice(false);
-                }
-            );
+            } else {
+                alert("Não foi possível calcular a rota. Verifique os endereços.");
+            }
+            setIsCalculatingPrice(false);
         } catch (error) {
             console.error("Erro ao calcular preço:", error);
             setIsCalculatingPrice(false);
@@ -583,96 +537,87 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
         return () => clearInterval(interval);
     }, [isCalling]);
 
-    // Google Map Initialization & Update logic
+    // Inicialização e atualização do mapa Mapbox (aba "map")
     useEffect(() => {
-        // Only init if tab is map and we have a container and the script is loaded
-        if (activeTab === 'map' && mapContainerRef.current && driverLocation && window.google) {
-            if (!mapInstanceRef.current) {
-                // Init Google Map
-                mapInstanceRef.current = new window.google.maps.Map(mapContainerRef.current, {
-                    center: { lat: driverLocation.lat, lng: driverLocation.lng },
-                    zoom: 15,
-                    mapTypeControl: false,
-                    streetViewControl: false,
-                    fullscreenControl: false
-                });
+        if (activeTab !== 'map' || !mapContainerRef.current || !driverLocation) return;
+        if (mapInstanceRef.current) return;
 
-                // Add Marker
-                // Add Marker
-                const carCustom = appSettings?.car_icon_url;
-                const motoCustom = appSettings?.moto_icon_url;
-                const iconUrl = selectedDriver?.vehicle_type === 'motorcycle'
-                    ? (motoCustom || 'https://cdn-icons-png.flaticon.com/512/3097/3097136.png') // Moto
-                    : (carCustom || 'https://cdn-icons-png.flaticon.com/512/3097/3097180.png'); // Car
+        let cancelled = false;
+        ensureMapbox().then((mapboxgl) => {
+            if (cancelled || !mapContainerRef.current || mapInstanceRef.current) return;
+            const map = new mapboxgl.Map({
+                container: mapContainerRef.current,
+                style: 'mapbox://styles/mapbox/streets-v12',
+                center: [driverLocation.lng, driverLocation.lat],
+                zoom: 15,
+                attributionControl: false,
+            });
+            mapInstanceRef.current = map;
+            map.on('load', () => setTimeout(() => map.resize(), 200));
 
-                markerRef.current = new window.google.maps.Marker({
-                    position: { lat: driverLocation.lat, lng: driverLocation.lng },
-                    map: mapInstanceRef.current,
-                    title: selectedDriver?.username,
-                    icon: {
-                        url: iconUrl,
-                        scaledSize: new window.google.maps.Size(40, 40)
-                    },
-                    animation: window.google.maps.Animation.DROP
-                });
+            const isMoto = selectedDriver?.vehicle_type === 'motorcycle';
+            const customUrl = isMoto ? appSettings?.moto_icon_url : appSettings?.car_icon_url;
+            const iconUrl = customUrl || (isMoto
+                ? 'https://cdn-icons-png.flaticon.com/512/3097/3097136.png'
+                : 'https://cdn-icons-png.flaticon.com/512/3097/3097180.png');
 
-                // Info Window
-                const infoWindow = new window.google.maps.InfoWindow({
-                    content: `<div style="color:black"><b>${selectedDriver?.username}</b><br>Status: ${selectedDriver?.status}</div>`
-                });
+            const el = document.createElement('div');
+            el.style.cssText = 'width:40px;height:40px;';
+            const img = document.createElement('img');
+            img.src = iconUrl;
+            img.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+            el.appendChild(img);
 
-                markerRef.current.addListener('click', () => {
-                    infoWindow.open(mapInstanceRef.current, markerRef.current);
-                });
-
-                infoWindow.open(mapInstanceRef.current, markerRef.current);
-            }
-        }
-
-        // Cleanup handled by useEffect teardown if necessary, but Maps instance is usually persistent for the component life
-        return () => {
-            // Optional: Clean up listeners if needed
-        };
-    }, [activeTab, selectedDriver]);
-
-    // Update Marker Icon when Settings Change
-    useEffect(() => {
-        if (!markerRef.current || !selectedDriver || !window.google) return;
-
-        const carCustom = appSettings?.car_icon_url;
-        const motoCustom = appSettings?.moto_icon_url;
-        const iconUrl = selectedDriver.vehicle_type === 'motorcycle'
-            ? (motoCustom || 'https://cdn-icons-png.flaticon.com/512/3097/3097136.png')
-            : (carCustom || 'https://cdn-icons-png.flaticon.com/512/3097/3097180.png');
-
-        markerRef.current.setIcon({
-            url: iconUrl,
-            scaledSize: new window.google.maps.Size(40, 40)
+            markerRef.current = new mapboxgl.Marker({ element: el })
+                .setLngLat([driverLocation.lng, driverLocation.lat])
+                .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(
+                    `<div style="color:black"><b>${selectedDriver?.username || ''}</b><br>Status: ${selectedDriver?.status || ''}</div>`
+                ))
+                .addTo(map);
         });
+
+        return () => { cancelled = true; };
+    }, [activeTab, selectedDriver, driverLocation !== null]);
+
+    // Recria o ícone do marcador quando as configurações mudam
+    useEffect(() => {
+        if (!markerRef.current || !selectedDriver) return;
+        const isMoto = selectedDriver.vehicle_type === 'motorcycle';
+        const customUrl = isMoto ? appSettings?.moto_icon_url : appSettings?.car_icon_url;
+        const iconUrl = customUrl || (isMoto
+            ? 'https://cdn-icons-png.flaticon.com/512/3097/3097136.png'
+            : 'https://cdn-icons-png.flaticon.com/512/3097/3097180.png');
+        const el = markerRef.current.getElement();
+        if (el) {
+            const img = el.querySelector('img');
+            if (img) img.src = iconUrl;
+        }
     }, [appSettings, selectedDriver]);
 
-    // Real-time location update (From DB)
+    // Atualização de localização em tempo real (do banco)
     useEffect(() => {
-        if (activeTab === 'map' && selectedDriver && window.google && drivers.length > 0) {
+        if (activeTab === 'map' && selectedDriver && drivers.length > 0) {
             const updatedDriver = drivers.find(d => d.id === selectedDriver.id);
-
             if (updatedDriver && updatedDriver.lat && updatedDriver.lng) {
                 const newLat = updatedDriver.lat;
                 const newLng = updatedDriver.lng;
-
                 setDriverLocation({ lat: newLat, lng: newLng });
-
-                // Update Google Marker Position
                 if (markerRef.current) {
-                    const newPos = new window.google.maps.LatLng(newLat, newLng);
-                    markerRef.current.setPosition(newPos);
-                    if (mapInstanceRef.current) {
-                        mapInstanceRef.current.panTo(newPos);
-                    }
+                    markerRef.current.setLngLat([newLng, newLat]);
+                    if (mapInstanceRef.current) mapInstanceRef.current.easeTo({ center: [newLng, newLat], duration: 600 });
                 }
             }
         }
     }, [drivers, activeTab, selectedDriver]);
+
+    // Destrói o mapa ao sair da aba para reinicializar corretamente
+    useEffect(() => {
+        if (activeTab !== 'map' && mapInstanceRef.current) {
+            mapInstanceRef.current.remove();
+            mapInstanceRef.current = null;
+            markerRef.current = null;
+        }
+    }, [activeTab]);
 
 
     const loadDrivers = async () => {
@@ -2820,20 +2765,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                     Origem (Endereço de Busca)
                                 </h3>
                                 <div className="relative mb-6">
-                                    <span className="material-icons absolute left-3 top-3 text-green-600">my_location</span>
+                                    <span className="material-icons absolute left-3 top-3 text-green-600 z-10">my_location</span>
                                     <input
-                                        ref={dispatchOriginInputRef}
                                         type="text"
                                         placeholder="Digite o endereço de busca..."
                                         value={dispatchOriginAddress}
-                                        onChange={(e) => {
-                                            setDispatchOriginAddress(e.target.value);
-                                            setDispatchPrice(null);
-                                        }}
+                                        onChange={(e) => handleDispatchOriginChange(e.target.value)}
                                         className="w-full pl-10 p-3 border rounded-lg text-sm focus:outline-none focus:ring-2 ring-green-500/50 text-gray-900 placeholder-gray-500"
                                     />
                                     {dispatchOriginCoords && (
                                         <span className="absolute right-3 top-3 text-green-500 text-xs">✓</span>
+                                    )}
+                                    {dispatchOriginSuggestions.length > 0 && (
+                                        <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-2xl z-30 max-h-52 overflow-y-auto border border-gray-200">
+                                            {dispatchOriginSuggestions.map((s) => (
+                                                <button key={s.placeId} onClick={() => pickDispatchOrigin(s)}
+                                                    className="w-full text-left px-4 py-2.5 hover:bg-gray-50 text-gray-700 text-sm flex items-center gap-2 border-b border-gray-100">
+                                                    <span className="material-icons text-gray-400 text-base">place</span>
+                                                    {s.description}
+                                                </button>
+                                            ))}
+                                        </div>
                                     )}
                                 </div>
 
@@ -2842,20 +2794,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                     Destino (Endereço de Entrega)
                                 </h3>
                                 <div className="relative mb-6">
-                                    <span className="material-icons absolute left-3 top-3 text-red-500">location_on</span>
+                                    <span className="material-icons absolute left-3 top-3 text-red-500 z-10">location_on</span>
                                     <input
-                                        ref={dispatchDestInputRef}
                                         type="text"
                                         placeholder="Digite o endereço de destino..."
                                         value={dispatchDestAddress}
-                                        onChange={(e) => {
-                                            setDispatchDestAddress(e.target.value);
-                                            setDispatchPrice(null);
-                                        }}
+                                        onChange={(e) => handleDispatchDestChange(e.target.value)}
                                         className="w-full pl-10 p-3 border rounded-lg text-sm focus:outline-none focus:ring-2 ring-blue-500/50 text-gray-900 placeholder-gray-500"
                                     />
                                     {dispatchDestCoords && (
                                         <span className="absolute right-3 top-3 text-green-500 text-xs">✓</span>
+                                    )}
+                                    {dispatchDestSuggestions.length > 0 && (
+                                        <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-2xl z-30 max-h-52 overflow-y-auto border border-gray-200">
+                                            {dispatchDestSuggestions.map((s) => (
+                                                <button key={s.placeId} onClick={() => pickDispatchDest(s)}
+                                                    className="w-full text-left px-4 py-2.5 hover:bg-gray-50 text-gray-700 text-sm flex items-center gap-2 border-b border-gray-100">
+                                                    <span className="material-icons text-gray-400 text-base">place</span>
+                                                    {s.description}
+                                                </button>
+                                            ))}
+                                        </div>
                                     )}
                                 </div>
 
