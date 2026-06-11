@@ -255,6 +255,7 @@ export const RideStatusOverlay: React.FC<RideStatusOverlayProps> = ({ ride, onCa
                 <RidePaymentModal
                     ride={ride}
                     currentUser={currentUser}
+                    coinValue={settings?.coin_value_brl || 1.0}
                     onPaymentComplete={() => {
                         // O modal já atualiza o status para 'finished' e payment_status para 'completed'.
                         // O realtime fará o restante (fechar o overlay).

@@ -7,13 +7,14 @@ import { createRidePixPayment, createRideCardPayment, getPaymentStatus, checkPay
 interface RidePaymentModalProps {
     ride: Ride;
     currentUser: UserProfile;
+    coinValue?: number; // Valor de 1 moeda em R$ (vem de settings.coin_value_brl)
     onPaymentComplete: () => void;
 }
 
 // Máximo de tentativas de polling (5s × 60 = 5 minutos)
 const MAX_POLL_ATTEMPTS = 60;
 
-export const RidePaymentModal: React.FC<RidePaymentModalProps> = ({ ride, currentUser, onPaymentComplete }) => {
+export const RidePaymentModal: React.FC<RidePaymentModalProps> = ({ ride, currentUser, coinValue, onPaymentComplete }) => {
     const [useCoins, setUseCoins] = useState(false);
     const [selectedMethod, setSelectedMethod] = useState<'cash' | 'pix' | 'card'>('cash');
     const [step, setStep] = useState<'select' | 'data' | 'pay' | 'cash_waiting' | 'success'>('select');
@@ -51,7 +52,7 @@ export const RidePaymentModal: React.FC<RidePaymentModalProps> = ({ ride, curren
 
     const ridePrice = ride.estimated_price || 0;
     const userCoins = currentUser.wallet_coins || 0;
-    const COIN_VALUE = 0.50;
+    const COIN_VALUE = coinValue && coinValue > 0 ? coinValue : 1.0;
 
     const maxDiscount = useCoins ? Math.min(ridePrice, userCoins * COIN_VALUE) : 0;
     const coinsToUse = useCoins ? Math.ceil(maxDiscount / COIN_VALUE) : 0;

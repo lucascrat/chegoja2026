@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, AppSettings, DriverStatus, Message } from '../types';
-import { fetchAppSettings, updateDriverStatus, fetchAdminContact, fetchMessages, subscribeToMessages } from '../services/supabaseClient';
+import { fetchAppSettings, updateDriverStatus, fetchAdminContact, fetchMessages, subscribeToMessages, sendMessage, supabase } from '../services/supabaseClient';
+import { sendNotification } from '../services/notificationSender';
 import { AppMap } from './AppMap';
 import { ChatWindow } from './ChatWindow';
 import { soundService } from '../services/soundService';
@@ -46,12 +47,24 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
     const timerRef = useRef<any>(null);
     const gpsRef = useRef<number | null>(null);
 
-    // Day earnings — synced from profile (updated by App.tsx via subscribeToProfiles)
-    const [dayEarnings, setDayEarnings] = useState(currentUser.financial_balance || 0);
+    // Ganhos do dia — soma real das corridas finalizadas hoje (RPC no banco)
+    const [dayEarnings, setDayEarnings] = useState(0);
+
+    const loadTodayEarnings = async () => {
+        const { data, error } = await supabase.rpc('driver_today_earnings', { p_driver_id: currentUser.id });
+        if (!error && data != null) setDayEarnings(Number(data));
+    };
 
     useEffect(() => {
-        setDayEarnings(currentUser.financial_balance || 0);
-    }, [currentUser.financial_balance]);
+        loadTodayEarnings();
+        // Atualiza a cada 60s e quando uma corrida muda de status
+        const interval = setInterval(loadTodayEarnings, 60000);
+        const sub = supabase
+            .channel(`driver_earnings:${currentUser.id}`)
+            .on('postgres_changes', { event: 'UPDATE', schema: 'chegoja', table: 'rides', filter: `driver_id=eq.${currentUser.id}` }, loadTodayEarnings)
+            .subscribe();
+        return () => { clearInterval(interval); supabase.removeChannel(sub); };
+    }, [currentUser.id]);
 
     useEffect(() => {
         fetchAppSettings().then(setSettings);
@@ -224,17 +237,35 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
         }
     };
 
-    const handlePanicButton = () => {
-        // Trigger panic alert
+    const handlePanicButton = async () => {
+        if (!window.confirm('🚨 Confirmar ALERTA DE PÂNICO?\n\nSua localização e um alerta serão enviados imediatamente à central.')) {
+            return;
+        }
         soundService.playReceived();
-        alert('🚨 ALERTA DE PÂNICO ATIVADO!\n\nEm uma implementação real, isso enviaria:\n• Sua localização GPS atual\n• Alerta para a central\n• Notificação para contatos de emergência');
 
-        // In production: Send location to backend/emergency contacts
-        console.log('PANIC BUTTON PRESSED', {
-            driver: currentUser.id,
-            location: driverLocation,
-            timestamp: new Date().toISOString()
-        });
+        const loc = driverLocation;
+        const mapsLink = loc ? `https://www.google.com/maps?q=${loc.lat},${loc.lng}` : 'Localização indisponível';
+        const texto = `🚨 ALERTA DE PÂNICO\nMotorista: ${currentUser.username}\nVeículo: ${currentUser.vehicle_model || '-'} ${currentUser.vehicle_plate || ''}\nLocal: ${mapsLink}\nHora: ${new Date().toLocaleString('pt-BR')}`;
+
+        try {
+            // 1. Envia como mensagem no chat de suporte (aparece no painel admin)
+            if (chatContact) {
+                await sendMessage({
+                    sender_id: currentUser.id,
+                    receiver_id: chatContact.id,
+                    content: texto,
+                    media_type: loc ? 'location' : 'text',
+                    media_url: loc ? `${loc.lat},${loc.lng}` : undefined,
+                    is_read: false
+                });
+            }
+            // 2. Push para os admins
+            await sendNotification('🚨 PÂNICO — Motorista em risco', texto, 'all', { sound: 'ubb' }).catch(() => {});
+            alert('🚨 Alerta enviado à central com sua localização!');
+        } catch (e) {
+            console.error('Panic send error', e);
+            alert('Não foi possível enviar o alerta. Ligue para a central.');
+        }
     };
 
     const handleStartTaximeter = () => {
@@ -254,8 +285,8 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
     const handleFinishRide = () => {
         setTaximeterActive(false);
         setTaximeterRunning(false);
-        // Add to day earnings
-        setDayEarnings(prev => prev + fare);
+        // Atualiza ganhos do dia a partir do banco (corridas finalizadas)
+        loadTodayEarnings();
         setElapsedTime(0);
         setDistance(0);
         setFare(0);

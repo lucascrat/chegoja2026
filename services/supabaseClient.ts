@@ -1347,61 +1347,25 @@ export const createPaymentRequest = async (
   pixKey: string
 ): Promise<{ success: boolean; message: string }> => {
   try {
-    // 1. Check Balance and Deduct immediately
-    const user = await fetchUserProfile(userId);
-    if (!user) return { success: false, message: "Usuário não encontrado" };
-
-    if (type === 'client_withdrawal') {
-      if ((user.wallet_coins || 0) < amountCoins) {
-        return { success: false, message: "Saldo de moedas insuficiente." };
-      }
-      // Deduct Coins
-      const { error: deductError } = await supabase.rpc('increment_coins', {
-        user_id_param: userId,
-        amount_param: -amountCoins
-      });
-      if (deductError) return { success: false, message: "Erro ao debitar moedas." };
-    } else {
-      // Driver Payout
-      if ((user.financial_balance || 0) < amountMoney) {
-        return { success: false, message: "Saldo financeiro insuficiente." };
-      }
-      // Deduct Money (Assuming we have a way, or just trust the request. Let's update profile)
-      const { error: deductError } = await supabase
-        .from('profiles')
-        .update({ financial_balance: (user.financial_balance || 0) - amountMoney })
-        .eq('id', userId);
-      if (deductError) return { success: false, message: "Erro ao debitar saldo financeiro." };
-    }
-
-    // 2. Create Request
-    const { error } = await supabase.from('payment_requests').insert({
-      user_id: userId,
-      type,
-      amount_money: amountMoney,
-      amount_coins: amountCoins,
-      pix_key: pixKey,
-      status: 'pending'
+    // Operação atômica no banco: valida saldo, debita, cria request e loga
+    // a transação — tudo numa só chamada (sem risco de perder saldo).
+    const { data, error } = await supabase.rpc('request_payout', {
+      p_user_id: userId,
+      p_type: type,
+      p_amount_money: amountMoney,
+      p_amount_coins: amountCoins,
+      p_pix_key: pixKey
     });
 
     if (error) {
-      // Rollback (Simplistic - ideally use transaction or RPC)
-      // Since supabase-js doesn't simple transactions, we log critical error.
-      // In production, use a single RPC for Check+Deduct+Insert.
-      console.error("CRITICAL: Failed to create request after deduction", error);
-      return { success: false, message: "Erro interno. Contate o suporte." };
+      console.error("Erro na RPC request_payout", error);
+      return { success: false, message: handleDbError(error, "request_payout") };
     }
 
-    // 3. Log Transaction
-    await supabase.from('wallet_transactions').insert({
-      user_id: userId,
-      type: 'payout',
-      amount_coins: type === 'client_withdrawal' ? -amountCoins : 0,
-      amount_money: type === 'driver_payout' ? -amountMoney : 0, // Negative for history visualization? Or positive as 'payout' type? Let's use negative to show deduction.
-      description: `Solicitação de Saque (${type === 'driver_payout' ? 'Motorista' : 'Cliente'})`
-    });
-
-    return { success: true, message: "Solicitação enviada com sucesso!" };
+    return {
+      success: !!data?.success,
+      message: data?.message || (data?.success ? "Solicitação enviada!" : "Erro ao processar solicitação.")
+    };
   } catch (e) {
     console.error("Exception in createPaymentRequest", e);
     return { success: false, message: "Erro ao processar solicitação." };
