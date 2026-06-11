@@ -1858,6 +1858,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                     </div>
                                 </div>
 
+                                {/* Raio de Chamadas (Multi-cidades) */}
+                                <div className="bg-white p-6 rounded-xl shadow-sm border border-green-200 md:col-span-2">
+                                    <div className="flex items-center gap-2 mb-4 text-green-700 font-bold border-b pb-2">
+                                        <span className="material-icons">radar</span> Raio de Chamadas (Multi-cidades)
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Distância máxima para o motorista receber a chamada</label>
+                                        <div className="flex items-center max-w-xs">
+                                            <input type="number" step="1" min="1" value={appSettings.ride_radius_km ?? 10} onChange={e => setAppSettings({ ...appSettings, ride_radius_km: parseFloat(e.target.value) })} className="flex-1 p-2 border rounded text-gray-900" />
+                                            <span className="ml-2 text-sm text-gray-500">km</span>
+                                        </div>
+                                        <p className="text-xs text-gray-400 mt-1">Corridas só tocam para motoristas dentro deste raio da origem. Evita que chamadas de uma cidade toquem em outra. Padrão: 10 km.</p>
+                                    </div>
+                                </div>
+
                                 {/* Night Rates */}
                                 <div className="bg-white p-6 rounded-xl shadow-sm border border-indigo-200">
                                     <div className="flex items-center justify-between mb-4 border-b pb-2">

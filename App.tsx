@@ -46,7 +46,7 @@ import {
 } from './services/supabaseClient';
 import { activatePlan, checkSubscriptionStatus } from './services/paymentService';
 import { UserProfile, UserRole, DriverStatus, Message, BroadcastMessage, Ride, AppSettings } from './types';
-import { APP_NAME } from './constants';
+import { APP_NAME, DEFAULT_RIDE_RADIUS_KM, getDistanceKm, rideCellOf, rideCellsAround } from './constants';
 import { soundService } from './services/soundService';
 import { AdMobService } from './services/adMobService';
 import { pushService } from './services/pushService';
@@ -192,9 +192,31 @@ function AppInner() {
   const activeRideRef = useRef<Ride | null>(null);
   const incomingRideRef = useRef<Ride | null>(null);
 
+  // Posição atual do dispositivo (atualizada pelo watchPosition) e raio de chamada (km)
+  const devicePosRef = useRef<{ lat: number, lng: number } | null>(null);
+  const rideRadiusRef = useRef<number>(DEFAULT_RIDE_RADIUS_KM);
+
+  // Células de grade (~11km) da região do motorista — filtram corridas no SERVIDOR.
+  // Recalculadas (com resubscribe) só quando o motorista muda de célula.
+  const [driverCells, setDriverCells] = useState<string[] | null>(null);
+  const driverCellRef = useRef<string | null>(null);
+
   // Sincronizar REFS com States
   useEffect(() => { activeRideRef.current = activeRide; }, [activeRide]);
   useEffect(() => { incomingRideRef.current = incomingRide; }, [incomingRide]);
+  useEffect(() => {
+    if (appSettings?.ride_radius_km && appSettings.ride_radius_km > 0) {
+      rideRadiusRef.current = appSettings.ride_radius_km;
+    }
+  }, [appSettings?.ride_radius_km]);
+
+  // Semente das células com a última posição conhecida do perfil (antes do GPS responder)
+  useEffect(() => {
+    if (currentUser?.role === UserRole.DRIVER && currentUser.lat != null && currentUser.lng != null && !driverCellRef.current) {
+      driverCellRef.current = rideCellOf(currentUser.lat, currentUser.lng);
+      setDriverCells(rideCellsAround(currentUser.lat, currentUser.lng, rideRadiusRef.current));
+    }
+  }, [currentUser?.id]);
 
   // Carregar dados iniciais (Settings e Corrida Ativa)
   useEffect(() => {
@@ -259,6 +281,11 @@ function AppInner() {
     console.log(`[Realtime] Iniciando monitoramento de corridas para ${currentUser.role}...`);
 
     const sub = subscribeToRides(currentUser.id, currentUser.role === UserRole.CLIENT ? 'client' : 'driver', async (ride) => {
+      // Corrida 'searching' muito antiga (expirada): não toca para o motorista
+      if (ride.status === 'searching' && ride.created_at && (Date.now() - new Date(ride.created_at).getTime()) > 10 * 60 * 1000) {
+        console.log(`[Realtime] Corrida ignorada (criada há mais de 10 min)`);
+        return;
+      }
       // LOGICA PARA MOTORISTA (Receber Chamada)
       if (currentUser.role === UserRole.DRIVER) {
         // Corrida buscando motorista (comportamento normal ou direcionado)
@@ -269,7 +296,24 @@ function AppInner() {
             return;
           }
 
+          // FILTRO DE RAIO: corridas abertas só tocam para motoristas próximos
+          // (corridas direcionadas — driver_id preenchido — ignoram o raio)
+          if (!ride.driver_id && ride.origin_lat != null && ride.origin_lng != null) {
+            const myPos = devicePosRef.current
+              || (currentUser.lat != null && currentUser.lng != null ? { lat: currentUser.lat, lng: currentUser.lng } : null);
+            if (myPos) {
+              const dist = getDistanceKm(myPos.lat, myPos.lng, ride.origin_lat, ride.origin_lng);
+              if (dist > rideRadiusRef.current) {
+                console.log(`[Realtime] Corrida ignorada (fora do raio: ${dist.toFixed(1)}km > ${rideRadiusRef.current}km)`);
+                return;
+              }
+            } else {
+              console.warn(`[Realtime] Sem posição GPS para filtrar por raio — exibindo chamada mesmo assim.`);
+            }
+          }
+
           console.log(`[Realtime] Nova corrida pendente detectada!`);
+          incomingRideRef.current = ride; // sync imediato: evita toque duplo se o evento chegar 2x
           setIncomingRide(ride);
           soundService.playRingtone();
           if (window.Android?.bringToFront) window.Android.bringToFront();
@@ -289,6 +333,7 @@ function AppInner() {
           };
 
           // Mostrar tela de chamada
+          incomingRideRef.current = centralRide; // sync imediato: evita toque duplo
           setIncomingRide(centralRide);
 
           // IMPORTANTE: Tocar som e vibrar com delay para garantir que a UI atualizou
@@ -313,6 +358,15 @@ function AppInner() {
               window.Android.triggerNativeAlert();
             }
           }, 100);
+        }
+
+        // Se a corrida que está TOCANDO foi cancelada/expirada ou aceita por outro motorista, fecha a chamada
+        if (incomingRideRef.current && ride.id === incomingRideRef.current.id
+          && ride.status !== 'searching' && ride.driver_id !== currentUser.id) {
+          console.log(`[Realtime] Chamada encerrada (corrida ${ride.status === 'cancelled' ? 'cancelada' : 'aceita por outro motorista'})`);
+          incomingRideRef.current = null;
+          setIncomingRide(null);
+          soundService.stopRingtone();
         }
 
         // Se a corrida que eu estou fazendo mudar (cancelamento, etc)
@@ -358,7 +412,7 @@ function AppInner() {
           });
         }
       }
-    });
+    }, { cells: currentUser.role === UserRole.DRIVER ? (driverCells || undefined) : undefined });
 
     // Polling de segurança (motorista): detecta cancelamento do cliente
     // mesmo se o realtime falhar
@@ -387,7 +441,7 @@ function AppInner() {
       sub.unsubscribe();
       if (driverRidePoll) clearInterval(driverRidePoll);
     };
-  }, [currentUser?.id, currentUser?.role]); // Fix: Removed activeRideRef dependency to prevent reconnection gaps
+  }, [currentUser?.id, currentUser?.role, driverCells]); // driverCells: resubscribe ao mudar de célula (~11km)
 
 
 
@@ -929,6 +983,18 @@ function AppInner() {
         (position) => {
           const { latitude, longitude } = position.coords;
           const now = Date.now();
+
+          // Posição local sempre fresca (usada no filtro de raio das chamadas)
+          devicePosRef.current = { lat: latitude, lng: longitude };
+
+          // Motorista mudou de célula (~11km)? Atualiza filtro do servidor (resubscribe)
+          if (currentUser.role === UserRole.DRIVER) {
+            const cell = rideCellOf(latitude, longitude);
+            if (cell !== driverCellRef.current) {
+              driverCellRef.current = cell;
+              setDriverCells(rideCellsAround(latitude, longitude, rideRadiusRef.current));
+            }
+          }
 
           // Throttle: Só envia pro banco a cada 10 segundos
           if (now - lastGpsUpdate.current > 10000) {

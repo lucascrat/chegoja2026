@@ -16,17 +16,24 @@ export interface NotificationResult {
 export async function sendNotification(
     title: string,
     body: string,
-    targetType: 'all' | 'drivers' | 'clients' | 'user',
+    targetType: 'all' | 'drivers' | 'clients' | 'user' | 'nearby_drivers',
     {
         targetUserId,
         imageUrl,
         sound,
-        data
+        data,
+        originLat,
+        originLng,
+        radiusKm
     }: {
         targetUserId?: string,
         imageUrl?: string,
         sound?: string,
-        data?: Record<string, string>
+        data?: Record<string, string>,
+        // Para targetType 'nearby_drivers': só motoristas dentro do raio recebem o push
+        originLat?: number,
+        originLng?: number,
+        radiusKm?: number
     } = {}
 ): Promise<NotificationResult> {
     try {
@@ -43,7 +50,10 @@ export async function sendNotification(
                 targetUserId,
                 imageUrl,
                 sound,
-                data
+                data,
+                originLat,
+                originLng,
+                radiusKm
             }),
         });
 
