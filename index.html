@@ -158,6 +158,8 @@
     }
   </script>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <!-- Mapbox GL JS -->
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.css" rel="stylesheet">
   <style>
     html,
     body {
@@ -290,15 +292,19 @@
     });
   </script>
 
-  <!-- Google Maps API Integration -->
+  <!-- Mapbox GL JS Integration -->
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.js"></script>
   <script>
-    window.initMap = function () {
-      window.googleMapsLoaded = true;
-      window.dispatchEvent(new Event('google-maps-loaded'));
-    };
+    // Sinaliza quando o Mapbox GL JS estiver disponível (mesmo padrão do antigo google-maps-loaded)
+    (function waitMapbox() {
+      if (window.mapboxgl) {
+        window.mapboxLoaded = true;
+        window.dispatchEvent(new Event('mapbox-loaded'));
+      } else {
+        setTimeout(waitMapbox, 100);
+      }
+    })();
   </script>
-  <script async defer
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBKv8TAp-RpKMYfWrKyeXhnL6pq-pL8DBg&libraries=places&callback=initMap"></script>
 </body>
 
 </html>

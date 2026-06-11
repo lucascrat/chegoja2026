@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppSettings, UserProfile } from '../types';
 import { fetchAppSettings } from '../services/supabaseClient';
+import { ensureMapbox, geocodeAddress, reverseGeocode, getRoute, searchAddresses, AddressSuggestion } from '../services/mapboxService';
 
 
 interface RideCalculatorProps {
@@ -22,16 +23,20 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
 
     const [loading, setLoading] = useState(false);
 
-    // Refs for Autocomplete
-    const originInputRef = useRef<HTMLInputElement>(null);
-    const destInputRef = useRef<HTMLInputElement>(null);
+    // Refs para o mapa Mapbox
     const mapRef = useRef<HTMLDivElement>(null);
-
-    // Google Maps Objects
     const mapInstance = useRef<any>(null);
-    const directionsRenderer = useRef<any>(null);
+    const mapLoaded = useRef(false);
     const startMarker = useRef<any>(null);
     const endMarker = useRef<any>(null);
+
+    // Coordenadas resolvidas dos endereços (preenchidas por autocomplete ou geocoding)
+    const originCoords = useRef<{ lat: number; lng: number } | null>(null);
+    const destCoords = useRef<{ lat: number; lng: number } | null>(null);
+
+    // Autocomplete
+    const [originSuggestions, setOriginSuggestions] = useState<AddressSuggestion[]>([]);
+    const [destSuggestions, setDestSuggestions] = useState<AddressSuggestion[]>([]);
 
     // Load Settings
     useEffect(() => {
@@ -41,106 +46,76 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
         }
     }, [currentUser]);
 
-    // Initialize Autocomplete & Map
+    // Inicializa o mapa Mapbox
     useEffect(() => {
-        if (!window.google || !window.google.maps) return;
-
-        // Init Map if not already
-        if (mapRef.current && !mapInstance.current) {
-            mapInstance.current = new window.google.maps.Map(mapRef.current, {
-                center: { lat: -3.8014, lng: -38.5323 }, // Default center (Fortaleza/CE approx)
+        let cancelled = false;
+        ensureMapbox().then((mapboxgl) => {
+            if (cancelled || !mapRef.current || mapInstance.current) return;
+            const map = new mapboxgl.Map({
+                container: mapRef.current,
+                style: 'mapbox://styles/mapbox/streets-v12',
+                center: [-38.5323, -3.8014],
                 zoom: 12,
-                disableDefaultUI: true,
-                zoomControl: true,
+                attributionControl: false,
             });
-            directionsRenderer.current = new window.google.maps.DirectionsRenderer({
-                map: mapInstance.current,
-                suppressMarkers: true,
-                polylineOptions: {
-                    strokeColor: "#25D366",
-                    strokeWeight: 6
-                }
+            mapInstance.current = map;
+            map.on('load', () => {
+                mapLoaded.current = true;
+                setTimeout(() => map.resize(), 200);
             });
-        }
-
-        // Init Autocomplete for Origin
-        if (originInputRef.current) {
-            const originAutocomplete = new window.google.maps.places.Autocomplete(originInputRef.current, {
-                fields: ["formatted_address", "geometry", "name"],
-                strictBounds: false,
-            });
-            originAutocomplete.addListener("place_changed", () => {
-                const place = originAutocomplete.getPlace();
-                if (place.formatted_address) {
-                    setOrigin(place.formatted_address);
-                } else if (place.name) {
-                    setOrigin(place.name);
-                }
-            });
-        }
-
-        // Init Autocomplete for Destination
-        if (destInputRef.current) {
-            const destAutocomplete = new window.google.maps.places.Autocomplete(destInputRef.current, {
-                fields: ["formatted_address", "geometry", "name"],
-                strictBounds: false,
-            });
-            destAutocomplete.addListener("place_changed", () => {
-                const place = destAutocomplete.getPlace();
-                if (place.formatted_address) {
-                    setDestination(place.formatted_address);
-                } else if (place.name) {
-                    setDestination(place.name);
-                }
-            });
-        }
-
+        });
+        return () => {
+            cancelled = true;
+            if (mapInstance.current) { mapInstance.current.remove(); mapInstance.current = null; mapLoaded.current = false; }
+        };
     }, []);
 
-    // Auto-fill Origin with Current Location
+    // Auto-preenche a partida com a localização atual
     useEffect(() => {
         if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition((position) => {
+            navigator.geolocation.getCurrentPosition(async (position) => {
                 const { latitude, longitude } = position.coords;
-
-                const runGeocode = () => {
-                    if (window.google && window.google.maps) {
-                        const geocoder = new window.google.maps.Geocoder();
-                        geocoder.geocode({ location: { lat: latitude, lng: longitude } }, (results: any, status: any) => {
-                            if (status === 'OK' && results && results[0]) {
-                                setOrigin(results[0].formatted_address);
-                                // Also center map
-                                if (mapInstance.current) {
-                                    mapInstance.current.setCenter({ lat: latitude, lng: longitude });
-                                    mapInstance.current.setZoom(15);
-
-                                    // Add a marker for current location
-                                    new window.google.maps.Marker({
-                                        position: { lat: latitude, lng: longitude },
-                                        map: mapInstance.current,
-                                        title: "Sua Localização",
-                                        icon: {
-                                            path: window.google.maps.SymbolPath.CIRCLE,
-                                            scale: 7,
-                                            fillColor: "#4285F4",
-                                            fillOpacity: 1,
-                                            strokeWeight: 2,
-                                            strokeColor: "white",
-                                        }
-                                    });
-                                }
-                            }
-                        });
-                    } else {
-                        setTimeout(runGeocode, 500);
-                    }
-                };
-                runGeocode();
-            }, (err) => {
-                console.warn("Error getting location for calculator:", err);
-            });
+                originCoords.current = { lat: latitude, lng: longitude };
+                const addr = await reverseGeocode(latitude, longitude);
+                if (addr) setOrigin(addr);
+                if (mapInstance.current) {
+                    mapInstance.current.setCenter([longitude, latitude]);
+                    mapInstance.current.setZoom(15);
+                }
+            }, (err) => console.warn('Error getting location for calculator:', err));
         }
     }, []);
+
+    // Autocomplete dos campos
+    const handleOriginChange = async (text: string) => {
+        setOrigin(text);
+        originCoords.current = null; // invalida coords ao digitar
+        setOriginSuggestions(text.length >= 3 ? await searchAddresses(text, originCoords.current || undefined) : []);
+    };
+    const handleDestChange = async (text: string) => {
+        setDestination(text);
+        destCoords.current = null;
+        setDestSuggestions(text.length >= 3 ? await searchAddresses(text) : []);
+    };
+    const pickOrigin = (s: AddressSuggestion) => {
+        setOrigin(s.description);
+        originCoords.current = s.location;
+        setOriginSuggestions([]);
+    };
+    const pickDest = (s: AddressSuggestion) => {
+        setDestination(s.description);
+        destCoords.current = s.location;
+        setDestSuggestions([]);
+    };
+
+    const clearRouteFromMap = () => {
+        const map = mapInstance.current;
+        if (!map) return;
+        if (map.getLayer('calc-route')) map.removeLayer('calc-route');
+        if (map.getSource('calc-route')) map.removeSource('calc-route');
+        if (startMarker.current) { startMarker.current.remove(); startMarker.current = null; }
+        if (endMarker.current) { endMarker.current.remove(); endMarker.current = null; }
+    };
 
     const handleCalculate = async () => {
         if (!origin || !destination || !settings) return;
@@ -149,56 +124,59 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
         setResult(null);
 
         try {
-            if (!window.google || !window.google.maps) {
-                alert("Google Maps ainda não foi carregado. Tente novamente em instantes.");
+            const mapboxgl = (window as any).mapboxgl;
+
+            // Resolve coordenadas (usa as do autocomplete ou geocodifica o texto)
+            let oCoord = originCoords.current;
+            let dCoord = destCoords.current;
+            if (!oCoord) { const g = await geocodeAddress(origin); oCoord = g?.location || null; }
+            if (!dCoord) { const g = await geocodeAddress(destination); dCoord = g?.location || null; }
+
+            if (!oCoord || !dCoord) {
+                alert("Não foi possível localizar os endereços. Verifique e tente novamente.");
                 setLoading(false);
                 return;
             }
 
-            const directionsService = new window.google.maps.DirectionsService();
+            const route = await getRoute(oCoord, dCoord);
+            if (route && route.geometry) {
+                const map = mapInstance.current;
+                if (map && mapLoaded.current) {
+                    clearRouteFromMap();
+                    map.addSource('calc-route', {
+                        type: 'geojson',
+                        data: { type: 'Feature', properties: {}, geometry: route.geometry },
+                    });
+                    map.addLayer({
+                        id: 'calc-route',
+                        type: 'line',
+                        source: 'calc-route',
+                        layout: { 'line-join': 'round', 'line-cap': 'round' },
+                        paint: { 'line-color': '#25D366', 'line-width': 6 },
+                    });
 
-            directionsService.route(
+                    const mkStart = document.createElement('div');
+                    mkStart.style.cssText = 'width:32px;height:32px;';
+                    mkStart.innerHTML = '<svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="20" r="16" fill="#111B21" stroke="#25D366" stroke-width="4"/><circle cx="20" cy="20" r="5" fill="white"/></svg>';
+                    startMarker.current = new mapboxgl.Marker({ element: mkStart }).setLngLat([oCoord.lng, oCoord.lat]).addTo(map);
+
+                    const mkEnd = document.createElement('div');
+                    mkEnd.style.cssText = 'width:32px;height:32px;';
+                    mkEnd.innerHTML = '<svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="4" width="32" height="32" rx="8" fill="#111B21" stroke="#FF4444" stroke-width="4"/><path d="M14 10V30M14 12C14 12 17 10 20 10C23 10 26 14 29 14V22C29 22 26 18 23 18C20 18 17 22 14 22" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                    endMarker.current = new mapboxgl.Marker({ element: mkEnd }).setLngLat([dCoord.lng, dCoord.lat]).addTo(map);
+
+                    const coords = route.geometry.coordinates;
+                    const bounds = coords.reduce(
+                        (b: any, c: [number, number]) => b.extend(c),
+                        new mapboxgl.LngLatBounds(coords[0], coords[0])
+                    );
+                    map.fitBounds(bounds, { padding: 50, duration: 600 });
+                }
+
+                const distanceKm = route.distanceKm;
+                const durationMin = route.durationMins;
+
                 {
-                    origin: origin,
-                    destination: destination,
-                    travelMode: window.google.maps.TravelMode.DRIVING,
-                    unitSystem: window.google.maps.UnitSystem.METRIC
-                },
-                (result: any, status: any) => {
-                    if (status === window.google.maps.DirectionsStatus.OK && result) {
-                        // Render Route on Map
-                        if (directionsRenderer.current) {
-                            directionsRenderer.current.setDirections(result);
-                        }
-
-                        const leg = result.routes[0].legs[0];
-
-                        startMarker.current = new window.google.maps.Marker({
-                            position: leg.start_location,
-                            map: mapInstance.current,
-                            icon: {
-                                url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent('<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="20" r="16" fill="#111B21" stroke="#25D366" stroke-width="4"/><circle cx="20" cy="20" r="5" fill="white"/></svg>'),
-                                scaledSize: new window.google.maps.Size(32, 32),
-                                anchor: new window.google.maps.Point(16, 16)
-                            }
-                        });
-
-                        endMarker.current = new window.google.maps.Marker({
-                            position: leg.end_location,
-                            map: mapInstance.current,
-                            icon: {
-                                url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent('<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="4" width="32" height="32" rx="8" fill="#111B21" stroke="#FF4444" stroke-width="4"/><path d="M14 10V30M14 12C14 12 17 10 20 10C23 10 26 14 29 14V22C29 22 26 18 23 18C20 18 17 22 14 22" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'),
-                                scaledSize: new window.google.maps.Size(32, 32),
-                                anchor: new window.google.maps.Point(16, 16)
-                            }
-                        });
-
-                        const distanceMeters = leg.distance.value;
-                        const durationSeconds = leg.duration.value;
-
-                        const distanceKm = distanceMeters / 1000;
-                        const durationMin = durationSeconds / 60;
-
                         // Calculate Price based on current time
                         const now = new Date();
                         const currentTime = now.getHours() * 60 + now.getMinutes();
@@ -267,14 +245,11 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
                             durationMin,
                             price: finalPrice
                         });
-
-                    } else {
-                        console.error("Directions request failed due to " + status);
-                        alert("Não foi possível traçar a rota. Verifique os endereços.");
-                    }
-                    setLoading(false);
                 }
-            );
+            } else {
+                alert("Não foi possível traçar a rota. Verifique os endereços.");
+            }
+            setLoading(false);
 
         } catch (error) {
             console.error("Erro ao calcular:", error);
@@ -326,27 +301,47 @@ export const RideCalculator: React.FC<RideCalculatorProps> = ({ currentUser, onC
                     {/* Inputs */}
                     <div className="space-y-3 mb-4 shrink-0">
                         <div className="relative">
-                            <span className="material-icons absolute left-3 top-3 text-green-600">my_location</span>
+                            <span className="material-icons absolute left-3 top-3 text-green-600 z-10">my_location</span>
                             <input
-                                ref={originInputRef}
                                 type="text"
                                 placeholder="Ponto de Partida (Ex: Centro)"
                                 value={origin}
-                                onChange={e => setOrigin(e.target.value)}
+                                onChange={e => handleOriginChange(e.target.value)}
                                 className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-whatsapp-green focus:ring-1 focus:ring-whatsapp-green transition"
                             />
+                            {originSuggestions.length > 0 && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-2xl z-30 max-h-52 overflow-y-auto border border-gray-200">
+                                    {originSuggestions.map((s) => (
+                                        <button key={s.placeId} onClick={() => pickOrigin(s)}
+                                            className="w-full text-left px-4 py-2.5 hover:bg-gray-50 text-gray-700 text-sm flex items-center gap-2 border-b border-gray-100">
+                                            <span className="material-icons text-gray-400 text-base">place</span>
+                                            {s.description}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         <div className="relative">
-                            <span className="material-icons absolute left-3 top-3 text-red-500">location_on</span>
+                            <span className="material-icons absolute left-3 top-3 text-red-500 z-10">location_on</span>
                             <input
-                                ref={destInputRef}
                                 type="text"
                                 placeholder="Destino (Ex: Shopping)"
                                 value={destination}
-                                onChange={e => setDestination(e.target.value)}
+                                onChange={e => handleDestChange(e.target.value)}
                                 className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-whatsapp-green focus:ring-1 focus:ring-whatsapp-green transition"
                             />
+                            {destSuggestions.length > 0 && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-2xl z-30 max-h-52 overflow-y-auto border border-gray-200">
+                                    {destSuggestions.map((s) => (
+                                        <button key={s.placeId} onClick={() => pickDest(s)}
+                                            className="w-full text-left px-4 py-2.5 hover:bg-gray-50 text-gray-700 text-sm flex items-center gap-2 border-b border-gray-100">
+                                            <span className="material-icons text-gray-400 text-base">place</span>
+                                            {s.description}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
 

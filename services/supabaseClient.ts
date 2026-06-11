@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../constants';
-import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser, BroadcastMessage, DriverPlan, Ride, Banner, Coupon, StoreProduct, WalletTransaction, StoreOrder } from '../types';
+import { Message, UserProfile, UserRole, DriverStatus, AppSettings, BingoSettings, BingoCard, BingoRankingUser, BroadcastMessage, DriverPlan, Ride, Banner, Coupon, StoreProduct, WalletTransaction, StoreOrder, PaymentRequest } from '../types';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   db: {
@@ -1334,6 +1334,7 @@ export const fetchWalletTransactions = async (userId: string): Promise<WalletTra
     handleDbError(error, "fetchWalletTransactions");
     return [];
   }
+  return data as WalletTransaction[];
 };
 
 // --- PAGAMENTOS E SAQUES ---
