@@ -227,9 +227,14 @@ export const updateUserProfile = async (
 };
 
 export const updateDriverPassword = async (driverId: string, newPassword: string): Promise<boolean> => {
+  // Hash no servidor antes de salvar
+  let finalPassword = newPassword;
+  const { data: hashed } = await supabase.rpc('hash_password', { p_password: newPassword });
+  if (hashed) finalPassword = hashed;
+
   const { error } = await supabase
     .from('profiles')
-    .update({ password: newPassword })
+    .update({ password: finalPassword })
     .eq('id', driverId);
 
   if (error) {
@@ -901,11 +906,18 @@ export const registerDriver = async (
       avatar_url = await uploadFile(avatarFile, 'images');
     }
 
+    // Hash da senha no servidor antes de salvar (bcrypt)
+    let finalPassword = password;
+    if (password) {
+      const { data: hashed } = await supabase.rpc('hash_password', { p_password: password });
+      if (hashed) finalPassword = hashed;
+    }
+
     const { data, error } = await supabase
       .from('profiles')
       .insert([{
         username,
-        password,
+        password: finalPassword,
         role: UserRole.DRIVER,
         status: DriverStatus.OFFLINE,
         is_approved: false, // Default pending
@@ -967,23 +979,31 @@ export const ensureTestDriver = async (username: string, password: string): Prom
 
 export const loginUser = async (username: string, password?: string, role?: UserRole): Promise<UserProfile | null> => {
   try {
+    if (password && role) {
+      // Login seguro: valida no servidor com bcrypt (e migra senhas legadas)
+      const { data, error } = await supabase.rpc('login_with_password', {
+        p_username: username,
+        p_password: password,
+        p_role: role
+      });
+
+      if (error) {
+        handleDbError(error, "loginUser (RPC)");
+        return null;
+      }
+      const profile = Array.isArray(data) ? data[0] : data;
+      return (profile as UserProfile) || null;
+    }
+
+    // Sem senha: apenas busca o perfil (refresh de dados, não autenticação)
     let query = supabase.from('profiles').select('*').eq('username', username);
-
-    if (role) {
-      query = query.eq('role', role);
-    }
-
-    if (password) {
-      query = query.eq('password', password);
-    }
+    if (role) query = query.eq('role', role);
 
     const { data, error } = await query.maybeSingle();
-
     if (error) {
       handleDbError(error, "loginUser");
       return null;
     }
-
     return data as UserProfile;
   } catch (e) {
     handleDbError(e, "loginUser_EXCEPTION");
