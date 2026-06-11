@@ -125,6 +125,7 @@ export interface AppSettings {
 
   // WhatsApp Settings
   official_whatsapp?: string;
+  waha_api_key?: string; // Chave da API WAHA (bot WhatsApp) — vem do banco, não do bundle
 }
 
 // Interfaces do Bingo
