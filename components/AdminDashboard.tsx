@@ -630,6 +630,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
     const loadSettings = async () => {
         const settings = await fetchAppSettings();
         setAppSettings(settings);
+        // Semeia a chave WAHA do banco para o serviço (sem hardcode no bundle)
+        const wahaKey = (settings as any).waha_api_key;
+        if (wahaKey && !localStorage.getItem('WAHA_API_KEY')) {
+            WahaService.setApiKey(wahaKey);
+        }
     };
 
     const loadBingoData = async () => {

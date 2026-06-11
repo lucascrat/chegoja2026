@@ -23,7 +23,9 @@ export const WahaService = {
         localStorage.setItem('WAHA_API_KEY', key);
     },
 
-    getApiKey: () => localStorage.getItem('WAHA_API_KEY') || '01Deus02@',
+    // Chave vem do app_settings (waha_api_key) via setApiKey no AdminDashboard,
+    // ou do localStorage — nunca hardcoded no bundle.
+    getApiKey: () => localStorage.getItem('WAHA_API_KEY') || '',
 
     setSessionName: (name: string) => {
         SESSION_NAME = name;
@@ -38,7 +40,7 @@ export const WahaService = {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Api-Key': localStorage.getItem('WAHA_API_KEY') || '01Deus02@'
+                    'X-Api-Key': WahaService.getApiKey()
                 },
                 body: JSON.stringify({
                     session: SESSION_NAME,
@@ -82,7 +84,7 @@ export const WahaService = {
             const chatsUrl = `${WAHA_API_URL}/api/${SESSION_NAME}/chats`;
 
             const chatsResp = await fetch(chatsUrl, {
-                headers: { 'X-Api-Key': localStorage.getItem('WAHA_API_KEY') || '01Deus02@' }
+                headers: { 'X-Api-Key': WahaService.getApiKey() }
             });
 
             if (!chatsResp.ok) return [];
@@ -95,7 +97,7 @@ export const WahaService = {
             for (const chat of chats.slice(0, 5)) {
                 const msgsUrl = `${WAHA_API_URL}/api/messages?chatId=${chat.id._serialized || chat.id}&limit=5&session=${SESSION_NAME}`;
                 const msgResp = await fetch(msgsUrl, {
-                    headers: { 'X-Api-Key': localStorage.getItem('WAHA_API_KEY') || '01Deus02@' }
+                    headers: { 'X-Api-Key': WahaService.getApiKey() }
                 });
                 if (msgResp.ok) {
                     const msgs = await msgResp.json();
@@ -118,7 +120,7 @@ export const WahaService = {
         try {
             const response = await fetch(`${WAHA_API_URL}/api/sessions/${SESSION_NAME}/status`, {
                 headers: {
-                    'X-Api-Key': localStorage.getItem('WAHA_API_KEY') || '01Deus02@'
+                    'X-Api-Key': WahaService.getApiKey()
                 }
             });
             return await response.json();
@@ -134,7 +136,7 @@ export const WahaService = {
         try {
             const response = await fetch(`${WAHA_API_URL}/api/sessions?all=true`, {
                 headers: {
-                    'X-Api-Key': localStorage.getItem('WAHA_API_KEY') || '01Deus02@'
+                    'X-Api-Key': WahaService.getApiKey()
                 }
             });
             return await response.json();
@@ -152,7 +154,7 @@ export const WahaService = {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Api-Key': localStorage.getItem('WAHA_API_KEY') || '01Deus02@'
+                    'X-Api-Key': WahaService.getApiKey()
                 },
                 body: JSON.stringify({
                     name: sessionName,
@@ -176,7 +178,7 @@ export const WahaService = {
             const response = await fetch(`${WAHA_API_URL}/api/sessions/${sessionName}/screenshot?session=${sessionName}`, {
                 method: 'GET',
                 headers: {
-                    'X-Api-Key': localStorage.getItem('WAHA_API_KEY') || '01Deus02@'
+                    'X-Api-Key': WahaService.getApiKey()
                 }
             });
             if (!response.ok) return null;
@@ -211,7 +213,7 @@ export const WahaService = {
 
             const response = await fetch(url, {
                 method: 'GET',
-                headers: { 'X-Api-Key': localStorage.getItem('WAHA_API_KEY') || '01Deus02@' }
+                headers: { 'X-Api-Key': WahaService.getApiKey() }
             });
 
             if (!response.ok) {
@@ -241,7 +243,7 @@ export const WahaService = {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Api-Key': localStorage.getItem('WAHA_API_KEY') || '01Deus02@'
+                    'X-Api-Key': WahaService.getApiKey()
                 },
                 body: JSON.stringify({
                     session: SESSION_NAME,
