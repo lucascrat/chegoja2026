@@ -15,6 +15,9 @@ COPY . .
 # Força o papel admin no build (tela de login vai direto para Área Administrativa)
 ENV VITE_APP_ROLE=admin
 ENV VITE_DEV_AUTO_LOGIN=false
+# Token Mapbox injetado pelo Coolify (env build-time) — não fica hardcoded no repo público
+ARG VITE_MAPBOX_TOKEN
+ENV VITE_MAPBOX_TOKEN=$VITE_MAPBOX_TOKEN
 RUN npx vite build
 
 FROM nginx:alpine
