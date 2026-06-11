@@ -9,9 +9,8 @@ export const SUPABASE_ANON_KEY = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiO
 // O nome da aplicação usado em toda a interface
 export const APP_NAME = "ChegoJá";
 
-// EFIBANK CONFIG (GERENCIANET)
-export const EFI_CLIENT_ID = "Client_Id_d962c930f4b1bbf4577401c8234a229c94830b8e";
-export const EFI_CLIENT_SECRET = "Client_Secret_d0d7f2cbefe1cdc6f658ebc82f5553b75509e336";
+// EFIBANK: credenciais ficam apenas na Edge Function payment-manager (servidor),
+// nunca no bundle do app.
 
 // PAGSEGURO CONFIG (Deprecated)
 // export const PAGSEGURO_TOKEN = "dbdd0b5b-8f3a-43d2-89a8-718e135ec8301408e62a428f8e14b71e5d408fe230f0cd10-2d62-4ec4-803b-b6fa7981f9bd";

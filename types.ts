@@ -258,6 +258,8 @@ export interface Ride {
   payment_status?: 'pending' | 'completed' | 'failed';
   final_price?: number;
   coins_used?: number;
+  rating?: number; // 1-5 estrelas dadas pelo cliente
+  rating_comment?: string;
 }
 
 // Tipo para as abas do Painel Admin

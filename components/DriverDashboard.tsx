@@ -49,10 +49,13 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
     // Ganhos do dia — soma real das corridas finalizadas hoje (RPC no banco)
     const [dayEarnings, setDayEarnings] = useState(0);
+    const [avgRating, setAvgRating] = useState<number | null>(null);
 
     const loadTodayEarnings = async () => {
         const { data, error } = await supabase.rpc('driver_today_earnings', { p_driver_id: currentUser.id });
         if (!error && data != null) setDayEarnings(Number(data));
+        const { data: rating } = await supabase.rpc('driver_avg_rating', { p_driver_id: currentUser.id });
+        if (rating != null) setAvgRating(Number(rating));
     };
 
     useEffect(() => {
@@ -334,7 +337,14 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
                     </div>
                     <div>
                         <p className="text-gray-400 text-[10px] uppercase font-bold tracking-wider">Ganhos do Dia</p>
-                        <p className="text-2xl font-black text-green-500">R$ {dayEarnings.toFixed(2)}</p>
+                        <div className="flex items-baseline gap-2">
+                            <p className="text-2xl font-black text-green-500">R$ {dayEarnings.toFixed(2)}</p>
+                            {avgRating != null && (
+                                <span className="text-yellow-400 text-xs font-bold flex items-center gap-0.5">
+                                    <span className="material-icons text-[12px]">star</span>{avgRating.toFixed(1)}
+                                </span>
+                            )}
+                        </div>
                     </div>
                 </div>
                 <button

@@ -182,6 +182,8 @@ function AppInner() {
   const [showDriverProfile, setShowDriverProfile] = useState(false);
   const [incomingRide, setIncomingRide] = useState<Ride | null>(null);
   const [activeRide, setActiveRide] = useState<Ride | null>(null);
+  const [rideToRate, setRideToRate] = useState<Ride | null>(null); // Avaliação pós-corrida
+  const [ratingStars, setRatingStars] = useState(0);
   const [isRideMapMinimized, setIsRideMapMinimized] = useState(false); // Controla se a tela de mapa está minimizada
   const [bannerText, setBannerText] = useState('ENTRE E CONCORRA A PRÊMIOS TODA SEMANA! - PRÊMIOS CHEGOJÁ');
   const [appSettings, setAppSettingsState] = useState<AppSettings | null>(null);
@@ -332,6 +334,11 @@ function AppInner() {
           // Salvar histórico de endereços quando corrida finalizar
           if (ride.status === 'finished' && ride.origin_address) {
             saveRideAddressHistory(currentUser.id, ride.origin_address, ride.destination_address).catch(console.warn);
+          }
+          // Pedir avaliação ao cliente quando finalizar com motorista
+          if (ride.status === 'finished' && ride.driver_id && !ride.rating) {
+            setRideToRate({ ...activeRideRef.current, ...ride });
+            setRatingStars(0);
           }
           setActiveRide(null);
         } else {
@@ -1131,19 +1138,11 @@ function AppInner() {
         }
       }
       else if (loginMode === 'admin') {
-        if (entryName === 'Holanda2025' && authPassword === '01Deus02@@@@') {
-          const realAdmin = await fetchAdminContact();
-          if (realAdmin) {
-            user = realAdmin;
-          } else {
-            user = {
-              id: 'admin-master',
-              username: 'Holanda2025',
-              role: UserRole.ADMIN,
-              status: DriverStatus.AVAILABLE,
-              avatar_url: 'https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff'
-            };
-          }
+        // Validação no servidor (bcrypt) — sem credenciais no código
+        const { loginUser } = await import('./services/supabaseClient');
+        const admin = await loginUser(entryName, authPassword, UserRole.ADMIN);
+        if (admin) {
+          user = admin;
         } else {
           alert("Credenciais de administrador incorretas.");
         }
@@ -1675,6 +1674,59 @@ function AppInner() {
             onAccept={handleAcceptRide}
             onReject={handleRejectRide}
           />
+        )}
+
+        {/* RATING MODAL (Cliente avalia o motorista pós-corrida) */}
+        {rideToRate && currentUser?.role === UserRole.CLIENT && (
+          <div className="absolute inset-0 z-[300] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in">
+            <div className="bg-[#1c272d] rounded-[32px] p-8 w-full max-w-sm border border-white/10 shadow-2xl text-center">
+              <img
+                src={rideToRate.driver?.avatar_url || '/logo.png'}
+                className="w-20 h-20 rounded-full object-cover border-4 border-whatsapp-green mx-auto mb-4"
+              />
+              <h2 className="text-white font-black text-xl mb-1">Como foi sua viagem?</h2>
+              <p className="text-gray-400 text-sm mb-6">
+                Avalie {rideToRate.driver?.username?.split(' ')[0] || 'o motorista'}
+              </p>
+
+              <div className="flex justify-center gap-2 mb-8">
+                {[1, 2, 3, 4, 5].map(star => (
+                  <button
+                    key={star}
+                    onClick={() => setRatingStars(star)}
+                    className="active:scale-90 transition-transform"
+                  >
+                    <span className={`material-icons text-4xl ${star <= ratingStars ? 'text-yellow-400' : 'text-gray-600'}`}>
+                      star
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setRideToRate(null)}
+                  className="flex-1 py-3 rounded-xl font-bold text-sm text-gray-400 bg-white/5 hover:bg-white/10 transition"
+                >
+                  Pular
+                </button>
+                <button
+                  disabled={ratingStars === 0}
+                  onClick={async () => {
+                    await supabase.from('rides')
+                      .update({ rating: ratingStars })
+                      .eq('id', rideToRate.id);
+                    setRideToRate(null);
+                  }}
+                  className={`flex-1 py-3 rounded-xl font-bold text-sm transition ${ratingStars > 0
+                    ? 'bg-whatsapp-green text-white hover:bg-[#00a884]'
+                    : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`}
+                >
+                  Enviar
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* BINGO OVERLAY */}
