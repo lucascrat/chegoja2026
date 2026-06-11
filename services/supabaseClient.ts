@@ -1169,6 +1169,31 @@ export const useCoupon = async (id: string): Promise<boolean> => {
   return true;
 };
 
+// Devolve um uso do cupom (corrida cancelada/expirada sem ser concluída)
+export const refundCoupon = async (id: string): Promise<boolean> => {
+  const { error } = await supabase.rpc('decrement_coupon_usage', { coupon_id: id });
+
+  if (error) {
+    // Fallback se a RPC ainda não existir no banco
+    const { data: coupon } = await supabase.from('coupons').select('used_quantity, total_quantity, is_active').eq('id', id).single();
+    if (coupon && coupon.used_quantity > 0) {
+      const wasExhausted = coupon.used_quantity >= coupon.total_quantity;
+      const { error: updateError } = await supabase
+        .from('coupons')
+        .update({
+          used_quantity: coupon.used_quantity - 1,
+          // Reativa apenas se tinha esgotado (não desfaz desativação manual do admin)
+          is_active: wasExhausted ? true : coupon.is_active
+        })
+        .eq('id', id);
+      return !updateError;
+    }
+    return false;
+  }
+
+  return true;
+};
+
 // --- RIDES FUNCTIONS ---
 
 export const createRideRequest = async (rideData: Partial<Ride>): Promise<{ data: Ride | null, error: string | null }> => {
@@ -1186,17 +1211,25 @@ export const createRideRequest = async (rideData: Partial<Ride>): Promise<{ data
 };
 
 export const cancelRide = async (rideId: string): Promise<boolean> => {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('rides')
     .update({
       status: 'cancelled',
       updated_at: new Date().toISOString()
     })
-    .eq('id', rideId);
+    .eq('id', rideId)
+    .not('status', 'in', '("finished","cancelled")') // evita cancelar 2x (e devolver cupom 2x)
+    .select('coupon_id')
+    .maybeSingle();
 
   if (error) {
     handleDbError(error, "cancelRide");
     return false;
+  }
+
+  // Corrida não concluída: devolve o cupom que foi consumido na criação
+  if (data?.coupon_id) {
+    refundCoupon(data.coupon_id).catch(e => console.warn("Falha ao devolver cupom:", e));
   }
   return true;
 };
@@ -1269,36 +1302,62 @@ export const fetchActiveRide = async (userId: string, role: 'client' | 'driver')
   return data as Ride;
 };
 
-export const subscribeToRides = (userId: string, role: 'client' | 'driver', callback: (ride: Ride) => void) => {
-  const filter = role === 'client' ? `client_id=eq.${userId}` : `status=eq.searching`;
+export const subscribeToRides = (
+  userId: string,
+  role: 'client' | 'driver',
+  callback: (ride: Ride) => void,
+  opts: { cells?: string[] } = {}
+) => {
+  // Nome único: evita conflito quando dois componentes assinam para o mesmo usuário
+  const channelName = `rides:${role}:${userId}:${Math.random().toString(36).slice(2, 8)}`;
 
-  // Para motoristas, também queremos ver atualizações de corridas que já aceitamos
-  const channelName = `rides:${userId}`;
+  const handle = (payload: any) => {
+    const ride = (payload.new || payload.old) as Ride;
+    if (!ride) return;
 
-  return supabase
-    .channel(channelName)
-    .on(
+    // Filtro manual mais preciso (defesa extra além do filtro do servidor)
+    if (role === 'client' && ride.client_id === userId) {
+      callback(ride);
+    } else if (role === 'driver') {
+      if (ride.status === 'searching' || ride.driver_id === userId) {
+        callback(ride);
+      }
+    }
+  };
+
+  const channel = supabase.channel(channelName);
+
+  if (role === 'client') {
+    // Filtro no servidor: o cliente só recebe eventos das PRÓPRIAS corridas
+    channel.on(
+      'postgres_changes',
+      { event: '*', schema: 'chegoja', table: 'rides', filter: `client_id=eq.${userId}` },
+      handle
+    );
+  } else {
+    // Motorista — dois filtros no servidor:
+    // 1) Corridas da minha região: células de ~11km cobrindo o raio de chamada.
+    //    Eventos de corridas de outras cidades nem chegam ao aparelho.
+    //    Sem células (GPS ainda indisponível), cai no filtro antigo por status.
+    channel.on(
       'postgres_changes',
       {
-        event: '*',
-        schema: 'chegoja',
-        table: 'rides'
+        event: '*', schema: 'chegoja', table: 'rides',
+        filter: opts.cells?.length
+          ? `origin_cell=in.(${opts.cells.join(',')})`
+          : `status=eq.searching`
       },
-      (payload) => {
-        const ride = (payload.new || payload.old) as Ride;
-        if (!ride) return;
+      handle
+    );
+    // 2) Corridas atribuídas a mim (chamada direta, central, e updates da corrida ativa)
+    channel.on(
+      'postgres_changes',
+      { event: '*', schema: 'chegoja', table: 'rides', filter: `driver_id=eq.${userId}` },
+      handle
+    );
+  }
 
-        // Filtro manual mais preciso
-        if (role === 'client' && ride.client_id === userId) {
-          callback(ride);
-        } else if (role === 'driver') {
-          if (ride.status === 'searching' || ride.driver_id === userId) {
-            callback(ride);
-          }
-        }
-      }
-    )
-    .subscribe();
+  return channel.subscribe();
 };
 
 export const subscribeToProfiles = (callback: (payload?: any) => void) => {

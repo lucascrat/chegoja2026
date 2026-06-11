@@ -116,6 +116,7 @@ export interface AppSettings {
   moto_name?: string;
   moto_description?: string;
   coin_value_brl?: number;
+  ride_radius_km?: number; // Raio (km) em que motoristas recebem chamadas. Padrão: 10
 
   // Efí Bank Settings
   efi_client_id?: string;

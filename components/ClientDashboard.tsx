@@ -9,6 +9,7 @@ import { RideStatusOverlay } from './RideStatusOverlay';
 import { sendNotification } from '../services/notificationSender';
 import { RewardsHub } from './RewardsHub';
 import { searchAddresses, reverseGeocode, getDistance } from '../services/mapboxService';
+import { DEFAULT_RIDE_RADIUS_KM, getDistanceKm } from '../constants';
 
 interface ClientDashboardProps {
     currentUser: UserProfile;
@@ -40,17 +41,32 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     const [activeTab, setActiveTab] = useState<'home' | 'drivers' | 'rewards' | 'wallet'>('home');
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
+    // Motoristas dentro do raio de atendimento (multi-cidades: não exibe motoristas de outra cidade)
+    const rideRadiusKm = settings?.ride_radius_km || DEFAULT_RIDE_RADIUS_KM;
+    const nearbyDrivers = userLocation
+        ? drivers.filter(d =>
+            d.lat != null && d.lng != null &&
+            getDistanceKm(userLocation.lat, userLocation.lng, d.lat, d.lng) <= rideRadiusKm)
+        : drivers;
+
     // Ref para o polling de corrida (evita stale closure no setInterval)
     const activeRideRef = useRef<Ride | null>(activeRide);
     useEffect(() => { activeRideRef.current = activeRide; }, [activeRide]);
 
-    // Timeout de busca: se ninguém aceitar em 90s, avisa o cliente
+    // Timeout de busca: se ninguém aceitar em 90s, avisa o cliente.
+    // Em 10 min sem aceite, cancela automaticamente (devolve o cupom) — assim a
+    // corrida não fica "tocando" para motoristas indefinidamente.
     const [searchTimedOut, setSearchTimedOut] = useState(false);
     useEffect(() => {
         if (activeRide?.status === 'searching') {
             setSearchTimedOut(false);
             const t = setTimeout(() => setSearchTimedOut(true), 90000);
-            return () => clearTimeout(t);
+            const expire = setTimeout(async () => {
+                await cancelRide(activeRide.id);
+                setActiveRide(null);
+                notify("Nenhum motorista aceitou sua corrida. Tente novamente.");
+            }, 600000);
+            return () => { clearTimeout(t); clearTimeout(expire); };
         } else {
             setSearchTimedOut(false);
         }
@@ -410,10 +426,14 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                 sendNotification(
                     targetDriverId ? "Chamada Direta para Você! 🚀" : "Nova Corrida Disponível! 🚗",
                     `Origem: ${currentAddress}\nDestino: ${destination.address}`,
-                    targetDriverId ? 'user' : 'drivers',
+                    targetDriverId ? 'user' : 'nearby_drivers',
                     {
                         targetUserId: targetDriverId || undefined,
                         sound: 'ubb',
+                        // Só motoristas num raio de X km da origem recebem o push (multi-cidades)
+                        originLat: userLocation.lat,
+                        originLng: userLocation.lng,
+                        radiusKm: settings?.ride_radius_km || DEFAULT_RIDE_RADIUS_KM,
                         data: {
                             type: 'new_ride',
                             ride_id: newRide.id
@@ -550,7 +570,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             {viewState === 'home' && activeTab === 'home' && !activeRide && (
                 <div className="absolute inset-0 z-10 flex flex-col pointer-events-none">
                     <div className="flex-1 relative pointer-events-auto">
-                        <AppMap drivers={drivers} userLocation={userLocation} onMarkerClick={onStartChat} settings={settings} />
+                        <AppMap drivers={nearbyDrivers} userLocation={userLocation} onMarkerClick={onStartChat} settings={settings} />
                         <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-white/80 to-transparent z-10 pointer-events-none"></div>
 
                         {/* Ad Banner Overlay - Sobrepondo o mapa */}
@@ -740,7 +760,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                     <div className="flex-1 relative">
                         {/* Map with Route */}
                         <AppMap
-                            drivers={drivers}
+                            drivers={nearbyDrivers}
                             userLocation={userLocation}
                             settings={settings}
                             showRoute={true}
@@ -996,10 +1016,10 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                         </div>
 
                                         <div className="flex overflow-x-auto pb-2 gap-3 scrollbar-hide">
-                                            {drivers.length === 0 ? (
+                                            {nearbyDrivers.length === 0 ? (
                                                 <p className="text-gray-400 text-[10px] italic px-1">Nenhum motorista online para selecionar.</p>
                                             ) : (
-                                                drivers.map(driver => (
+                                                nearbyDrivers.map(driver => (
                                                     <div
                                                         key={driver.id}
                                                         onClick={() => setTargetDriverId(driver.id)}
@@ -1104,13 +1124,13 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                 </div>
                             </div>
                             <div className="grid grid-cols-1 gap-4">
-                                {drivers.length === 0 ? (
+                                {nearbyDrivers.length === 0 ? (
                                     <div className="text-center py-20 bg-[#1c272d]/40 rounded-[40px] border border-white/5 border-dashed">
                                         <span className="material-icons text-6xl text-gray-700 mb-4">no_accounts</span>
                                         <p className="font-bold text-gray-500 uppercase text-xs tracking-widest">Nenhum motorista online</p>
                                     </div>
                                 ) : (
-                                    drivers.map(driver => (
+                                    nearbyDrivers.map(driver => (
                                         <div key={driver.id} onClick={() => onStartChat(driver)} className="bg-[#1c272d] border border-white/5 p-4 rounded-2xl flex items-center justify-between hover:bg-white/5">
                                             <div className="flex items-center gap-4">
                                                 <img src={driver.avatar_url || "/logo.png"} className="w-12 h-12 rounded-full object-cover" />
