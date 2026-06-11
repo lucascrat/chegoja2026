@@ -40,6 +40,22 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     const [activeTab, setActiveTab] = useState<'home' | 'drivers' | 'rewards' | 'wallet'>('home');
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
+    // Ref para o polling de corrida (evita stale closure no setInterval)
+    const activeRideRef = useRef<Ride | null>(activeRide);
+    useEffect(() => { activeRideRef.current = activeRide; }, [activeRide]);
+
+    // Timeout de busca: se ninguém aceitar em 90s, avisa o cliente
+    const [searchTimedOut, setSearchTimedOut] = useState(false);
+    useEffect(() => {
+        if (activeRide?.status === 'searching') {
+            setSearchTimedOut(false);
+            const t = setTimeout(() => setSearchTimedOut(true), 90000);
+            return () => clearTimeout(t);
+        } else {
+            setSearchTimedOut(false);
+        }
+    }, [activeRide?.status, activeRide?.id]);
+
     // View State Management
     type ViewState = 'home' | 'search_input' | 'location_check' | 'vehicle_select';
     const [viewState, setViewState] = useState<ViewState>('home');
@@ -220,7 +236,25 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
         const profileSub = subscribeToProfiles(() => fetchOnlineDrivers().then(setDrivers));
         const rideSub = subscribeToRides(currentUser.id, 'client', (updatedRide) => setActiveRide(updatedRide));
 
+        // Polling de segurança: sincroniza o status da corrida direto do banco
+        // a cada 5s (cobre falhas do realtime — ex: aceite do motorista não chegar)
+        const ridePoll = setInterval(async () => {
+            const prev = activeRideRef.current;
+            if (!prev) return; // sem corrida ativa local, não força nada
+            const fresh = await fetchActiveRide(currentUser.id, 'client');
+            if (!fresh) {
+                // corrida finalizada/cancelada no servidor
+                if (activeRideRef.current) setActiveRide(null);
+                return;
+            }
+            if (fresh.id !== prev.id || fresh.status !== prev.status || fresh.driver_id !== prev.driver_id) {
+                console.log(`[RidePoll] Status atualizado: ${prev.status} -> ${fresh.status}`);
+                setActiveRide(fresh); // já vem com join de driver/client
+            }
+        }, 5000);
+
         return () => {
+            clearInterval(ridePoll);
             profileSub.unsubscribe();
             rideSub.unsubscribe();
             supabase.removeChannel(settingsSub);
@@ -334,7 +368,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             // Validar pagamento com moedas
             if (paymentMethod === 'coins') {
                 const userCoins = currentUser.wallet_coins || 0;
-                const coinValue = settings?.coin_value_brl || 0.10; // Valor padrão: R$ 0,10 por moeda
+                const coinValue = settings?.coin_value_brl || 1.0; // Valor padrão alinhado ao banco (R$ 1,00/moeda)
                 const requiredCoins = Math.ceil(finalPrice / coinValue);
 
                 if (userCoins < requiredCoins) {
@@ -1427,6 +1461,35 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                         settings={settings}
                         currentUser={currentUser}
                     />
+                </div>
+            )}
+
+            {/* Aviso de demora na busca (90s sem motorista) */}
+            {activeRide?.status === 'searching' && searchTimedOut && (
+                <div className="absolute inset-x-0 bottom-0 z-[210] p-4 animate-slide-up">
+                    <div className="bg-[#1c272d] border border-yellow-500/30 rounded-3xl p-5 shadow-2xl">
+                        <div className="flex items-center gap-3 mb-3">
+                            <span className="material-icons text-yellow-500">hourglass_empty</span>
+                            <div>
+                                <p className="text-white font-bold text-sm">Nenhum motorista ainda</p>
+                                <p className="text-gray-400 text-xs">Os motoristas próximos podem estar ocupados.</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={handleCancelRide}
+                                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold text-sm active:scale-[0.98] transition-all"
+                            >
+                                Cancelar corrida
+                            </button>
+                            <button
+                                onClick={() => setSearchTimedOut(false)}
+                                className="flex-1 bg-whatsapp-green hover:bg-[#00a884] text-white py-3 rounded-xl font-bold text-sm active:scale-[0.98] transition-all"
+                            >
+                                Continuar aguardando
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

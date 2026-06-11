@@ -353,9 +353,32 @@ function AppInner() {
       }
     });
 
+    // Polling de segurança (motorista): detecta cancelamento do cliente
+    // mesmo se o realtime falhar
+    const driverRidePoll = currentUser.role === UserRole.DRIVER ? setInterval(async () => {
+      const prev = activeRideRef.current;
+      if (!prev) return;
+      const fresh = await fetchActiveRide(currentUser.id, 'driver');
+      if (!fresh || fresh.id !== prev.id) {
+        // Corrida sumiu da lista de ativas = cancelada ou finalizada externamente
+        const { data } = await supabase.from('rides').select('status').eq('id', prev.id).maybeSingle();
+        if (data?.status === 'cancelled') {
+          alert("O cliente cancelou a corrida.");
+          soundService.stopRingtone();
+          setActiveRide(null);
+        }
+        return;
+      }
+      if (fresh.status !== prev.status) {
+        console.log(`[RidePoll/Driver] Status: ${prev.status} -> ${fresh.status}`);
+        setActiveRide({ ...fresh, driver: currentUser });
+      }
+    }, 5000) : null;
+
     return () => {
       console.log(`[Realtime] Encerrando monitoramento de corridas.`);
       sub.unsubscribe();
+      if (driverRidePoll) clearInterval(driverRidePoll);
     };
   }, [currentUser?.id, currentUser?.role]); // Fix: Removed activeRideRef dependency to prevent reconnection gaps
 
@@ -463,6 +486,21 @@ function AppInner() {
         const user = JSON.parse(savedUser);
         console.log("Login automático via memória do aparelho:", user.username);
         setCurrentUser(user);
+
+        // Revalida o perfil no banco em segundo plano (pega banimento/edição do admin)
+        if (user.id && user.role !== UserRole.ADMIN) {
+          fetchUserProfile(user.id).then(fresh => {
+            if (!fresh) {
+              // Conta apagada pelo admin — desloga
+              console.warn("Conta não existe mais no servidor. Encerrando sessão.");
+              localStorage.removeItem('chegoja_user');
+              setCurrentUser(null);
+            } else {
+              setCurrentUser(fresh);
+              localStorage.setItem('chegoja_user', JSON.stringify(fresh));
+            }
+          }).catch(e => console.warn("Falha ao revalidar sessão:", e));
+        }
 
         if (user.role === UserRole.DRIVER) {
           setTimeout(() => requestDriverPermissions(), 1000);
@@ -573,6 +611,29 @@ function AppInner() {
       };
     }
   }, [currentUser]);
+
+  // 3.4 Reconectar Realtime ao voltar do background (Android mata o websocket)
+  useEffect(() => {
+    const handleVisible = () => {
+      if (document.visibilityState === 'visible') {
+        const channels = supabase.getChannels();
+        const stale = channels.some(c => c.state !== 'joined');
+        if (stale || channels.length === 0) {
+          console.log('[Realtime] App voltou ao foco — reconectando canais...');
+          supabase.realtime.disconnect();
+          supabase.realtime.connect();
+          // Re-subscreve os canais existentes
+          channels.forEach(c => { if (c.state !== 'joined') c.subscribe(); });
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisible);
+    window.addEventListener('focus', handleVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisible);
+      window.removeEventListener('focus', handleVisible);
+    };
+  }, []);
 
   // 3.5 PiP Listeners (Native)
   useEffect(() => {
@@ -826,10 +887,16 @@ function AppInner() {
       console.log("[GPS] Iniciando rastreamento econômico do motorista (35s)...");
 
       const updateLocation = async () => {
-        const updatedDriver = await fetchUserProfile(activeRide.driver_id!);
-        if (updatedDriver && activeRide) {
-          console.log("[GPS] Localização do motorista atualizada.");
-          setActiveRide(prev => prev ? { ...prev, driver: updatedDriver } : null);
+        // Busca apenas lat/lng (não o perfil inteiro) para economizar banco/banda
+        const { data } = await supabase
+          .from('profiles')
+          .select('lat,lng')
+          .eq('id', activeRide.driver_id!)
+          .maybeSingle();
+        if (data) {
+          setActiveRide(prev => prev?.driver
+            ? { ...prev, driver: { ...prev.driver, lat: data.lat, lng: data.lng } }
+            : prev);
         }
       };
 
