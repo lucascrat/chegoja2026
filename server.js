@@ -519,9 +519,9 @@ app.post('/api/migrate-data', async (req, res) => {
     }
 
     const targetDbUrls = [
+        "postgres://postgres:1pan66Rn5b9vVq1atgr6O6I1vmX3un7q@supabase-db-g6f93arlsyi0onk3ovmvbjof:5432/postgres",
         "postgres://postgres:1pan66Rn5b9vVq1atgr6O6I1vmX3un7q@g6f93arlsyi0onk3ovmvbjof-supabase-db:5432/postgres",
-        "postgres://postgres:1pan66Rn5b9vVq1atgr6O6I1vmX3un7q@gz5q6hkbtsqdcoan8q8e9qhw:5432/postgres",
-        "postgres://postgres:1pan66Rn5b9vVq1atgr6O6I1vmX3un7q@supabase-db:5432/postgres"
+        "postgres://postgres:1pan66Rn5b9vVq1atgr6O6I1vmX3un7q@gz5q6hkbtsqdcoan8q8e9qhw:5432/postgres"
     ];
 
     let targetClient = null;
