@@ -16,5 +16,5 @@ COPY . .
 # Expose server port
 EXPOSE 3000
 
-# Start server
-CMD ["node", "server.js"]
+# Start server using package.json script (which runs migrations first)
+CMD ["npm", "start"]
