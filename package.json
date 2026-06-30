@@ -4,7 +4,7 @@
   "description": "Professional Web Admin Dashboard for ChegoJá 2026 Mobilidade",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node db_migrate_supabase.js && node server.js",
     "migrate": "node db_migrate.js"
   },
   "dependencies": {
