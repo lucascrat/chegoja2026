@@ -2,9 +2,9 @@
 // Leitura das variáveis de ambiente (Vercel/Vite)
 // Se a variável existir (Produção), usa ela. Se não, usa o valor hardcoded (Desenvolvimento/Demo).
 
-export const SUPABASE_URL = 'https://supabase.appbr.pro';
+export const SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL || 'https://supabase.appbr.pro';
 
-export const SUPABASE_ANON_KEY = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4MTA2MzIyMCwiZXhwIjo0OTM2NzM2ODIwLCJyb2xlIjoiYW5vbiJ9.9fcWLR01Jsj6ojWGyGwF7FGGNqEObt13KOAfwdGvbcY';
+export const SUPABASE_ANON_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4MTA2MzIyMCwiZXhwIjo0OTM2NzM2ODIwLCJyb2xlIjoiYW5vbiJ9.9fcWLR01Jsj6ojWGyGwF7FGGNqEObt13KOAfwdGvbcY';
 
 // O nome da aplicação usado em toda a interface
 export const APP_NAME = "ChegoJá";
