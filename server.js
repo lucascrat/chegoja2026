@@ -486,6 +486,30 @@ app.get('/api/drivers/online', async (req, res) => {
     }
 });
 
+// DNS Resolution debugging endpoint
+app.get('/api/dns-resolve', async (req, res) => {
+    const dns = require('dns').promises;
+    const names = [
+        "g6f93arlsyi0onk3ovmvbjof-supabase-db",
+        "gz5q6hkbtsqdcoan8q8e9qhw",
+        "supabase-db",
+        "supabase-db-g6f93arlsyi0onk3ovmvbjof",
+        "f4eisr2vdm0xlhq5jjb6rlff",
+        "coolify-db",
+        "localhost"
+    ];
+    const results = {};
+    for (const name of names) {
+        try {
+            const lookup = await dns.lookup(name);
+            results[name] = { success: true, address: lookup.address, family: lookup.family };
+        } catch (e) {
+            results[name] = { success: false, error: e.message };
+        }
+    }
+    res.json(results);
+});
+
 // Temporary migration endpoint
 app.post('/api/migrate-data', async (req, res) => {
     const { clients, drivers, dynamics, trips } = req.body;
