@@ -486,6 +486,166 @@ app.get('/api/drivers/online', async (req, res) => {
     }
 });
 
+// Temporary migration endpoint
+app.post('/api/migrate-data', async (req, res) => {
+    const { clients, drivers, dynamics, trips } = req.body;
+
+    if (!clients || !drivers || !dynamics || !trips) {
+        return res.status(400).json({ error: "Missing migration data payload." });
+    }
+
+    const targetDbUrls = [
+        "postgres://postgres:1pan66Rn5b9vVq1atgr6O6I1vmX3un7q@g6f93arlsyi0onk3ovmvbjof-supabase-db:5432/postgres",
+        "postgres://postgres:1pan66Rn5b9vVq1atgr6O6I1vmX3un7q@gz5q6hkbtsqdcoan8q8e9qhw:5432/postgres",
+        "postgres://postgres:1pan66Rn5b9vVq1atgr6O6I1vmX3un7q@supabase-db:5432/postgres"
+    ];
+
+    let targetClient = null;
+    let connectedUrl = "";
+
+    const { Client } = require('pg');
+
+    for (const url of targetDbUrls) {
+        const masked = url.replace(/:([^:@]+)@/, ":******@");
+        console.log(`[MIGRATION-API] Attempting connection to: ${masked}`);
+        const c = new Client({ connectionString: url, connectionTimeoutMillis: 3000 });
+        try {
+            await c.connect();
+            console.log(`[MIGRATION-API] Connected using: ${masked}`);
+            targetClient = c;
+            connectedUrl = url;
+            break;
+        } catch (err) {
+            console.log(`[MIGRATION-API] Failed to connect to ${masked}: ${err.message}`);
+        }
+    }
+
+    if (!targetClient) {
+        return res.status(500).json({ error: "Could not connect to any target Supabase database hosts." });
+    }
+
+    try {
+        console.log("[MIGRATION-API] Cleaning target tables...");
+        await targetClient.query("DROP TABLE IF EXISTS trips CASCADE;");
+        await targetClient.query("DROP TABLE IF EXISTS drivers CASCADE;");
+        await targetClient.query("DROP TABLE IF EXISTS clients CASCADE;");
+        await targetClient.query("DROP TABLE IF EXISTS dynamics CASCADE;");
+
+        console.log("[MIGRATION-API] Creating schema...");
+        await targetClient.query(`
+            CREATE TABLE drivers (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                phone VARCHAR(20) NOT NULL,
+                cnh_approved BOOLEAN DEFAULT FALSE,
+                res_approved BOOLEAN DEFAULT FALSE,
+                cnh_url VARCHAR(255),
+                res_url VARCHAR(255),
+                overall_status VARCHAR(20) DEFAULT 'pending',
+                lat DOUBLE PRECISION DEFAULT -23.5616,
+                lng DOUBLE PRECISION DEFAULT -46.6560,
+                active BOOLEAN DEFAULT FALSE,
+                avatar VARCHAR(255),
+                rating NUMERIC(3, 2) DEFAULT 5.00,
+                vehicle_desc VARCHAR(100),
+                vehicle_plate VARCHAR(20),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        await targetClient.query(`
+            CREATE TABLE clients (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                phone VARCHAR(20) NOT NULL UNIQUE,
+                email VARCHAR(100),
+                avatar VARCHAR(255),
+                rating NUMERIC(3, 2) DEFAULT 5.00,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        await targetClient.query(`
+            CREATE TABLE dynamics (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL UNIQUE,
+                multiplier NUMERIC(3, 2) DEFAULT 1.00,
+                base_fare NUMERIC(6, 2) DEFAULT 5.00,
+                rate_per_km NUMERIC(6, 2) DEFAULT 2.00,
+                rate_per_minute NUMERIC(6, 2) DEFAULT 0.50,
+                active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        await targetClient.query(`
+            CREATE TABLE trips (
+                id SERIAL PRIMARY KEY,
+                client_id INT REFERENCES clients(id) ON DELETE SET NULL,
+                driver_id INT REFERENCES drivers(id) ON DELETE SET NULL,
+                pickup_address VARCHAR(255) NOT NULL,
+                pickup_lat DOUBLE PRECISION NOT NULL,
+                pickup_lng DOUBLE PRECISION NOT NULL,
+                dest_address VARCHAR(255) NOT NULL,
+                dest_lat DOUBLE PRECISION NOT NULL,
+                dest_lng DOUBLE PRECISION NOT NULL,
+                fare NUMERIC(8, 2) NOT NULL,
+                status VARCHAR(30) DEFAULT 'requested',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        console.log("[MIGRATION-API] Seeding clients...");
+        for (const row of clients) {
+            await targetClient.query(`
+                INSERT INTO clients (id, name, phone, email, avatar, rating, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+            `, [row.id, row.name, row.phone, row.email, row.avatar, row.rating, row.created_at]);
+        }
+        await targetClient.query("SELECT setval('clients_id_seq', COALESCE((SELECT MAX(id)+1 FROM clients), 1), false)");
+
+        console.log("[MIGRATION-API] Seeding drivers...");
+        for (const row of drivers) {
+            await targetClient.query(`
+                INSERT INTO drivers (id, name, phone, cnh_approved, res_approved, cnh_url, res_url, overall_status, lat, lng, active, avatar, rating, vehicle_desc, vehicle_plate, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+            `, [row.id, row.name, row.phone, row.cnh_approved, row.res_approved, row.cnh_url, row.res_url, row.overall_status, row.lat, row.lng, row.active, row.avatar, row.rating, row.vehicle_desc, row.vehicle_plate, row.created_at]);
+        }
+        await targetClient.query("SELECT setval('drivers_id_seq', COALESCE((SELECT MAX(id)+1 FROM drivers), 1), false)");
+
+        console.log("[MIGRATION-API] Seeding dynamics...");
+        for (const row of dynamics) {
+            await targetClient.query(`
+                INSERT INTO dynamics (id, name, multiplier, base_fare, rate_per_km, rate_per_minute, active, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            `, [row.id, row.name, row.multiplier, row.base_fare, row.rate_per_km, row.rate_per_minute, row.active, row.created_at]);
+        }
+        await targetClient.query("SELECT setval('dynamics_id_seq', COALESCE((SELECT MAX(id)+1 FROM dynamics), 1), false)");
+
+        console.log("[MIGRATION-API] Seeding trips...");
+        for (const row of trips) {
+            await targetClient.query(`
+                INSERT INTO trips (id, client_id, driver_id, pickup_address, pickup_lat, pickup_lng, dest_address, dest_lat, dest_lng, fare, status, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            `, [row.id, row.client_id, row.driver_id, row.pickup_address, row.pickup_lat, row.pickup_lng, row.dest_address, row.dest_lat, row.dest_lng, row.fare, row.status, row.created_at]);
+        }
+        await targetClient.query("SELECT setval('trips_id_seq', COALESCE((SELECT MAX(id)+1 FROM trips), 1), false)");
+
+        console.log("[MIGRATION-API] Migration completed successfully!");
+        res.json({
+            success: true,
+            message: "Database migrated to Supabase successfully!",
+            connectedUrl: connectedUrl.replace(/:([^:@]+)@/, ":******@"),
+            databaseUrlEnv: connectedUrl
+        });
+    } catch (err) {
+        console.error("[MIGRATION-API] Error:", err.message);
+        res.status(500).json({ error: "Migration error: " + err.message });
+    } finally {
+        await targetClient.end();
+    }
+});
+
 // Wildcard fallback to serve the static frontend
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
