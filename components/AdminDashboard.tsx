@@ -20,111 +20,14 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }) => {
-    // Login state for standalone panel
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    // ALL HOOKS MUST BE AT TOP LEVEL — no conditional hooks
+    // Login state for standalone panel (when currentUser is null, i.e. web painel mode)
+    const [localAdmin, setLocalAdmin] = useState<UserProfile | null>(null);
     const [loginUsername, setLoginUsername] = useState('');
     const [loginPassword, setLoginPassword] = useState('');
     const [loginError, setLoginError] = useState('');
     const [isLoginLoading, setIsLoginLoading] = useState(false);
     
-    // If no currentUser and not logged in via standalone, show login page
-    if (!currentUser && !isLoggedIn) {
-        const handleLogin = async (e: React.FormEvent) => {
-            e.preventDefault();
-            if (!loginUsername || !loginPassword) {
-                setLoginError('Preencha usuário e senha');
-                return;
-            }
-            
-            setIsLoginLoading(true);
-            setLoginError('');
-            
-            try {
-                const admin = await loginUser(loginUsername, loginPassword, UserRole.ADMIN);
-                if (admin) {
-                    setIsLoggedIn(true);
-                    setLoginError('');
-                    // Page will re-render with the new user context
-                } else {
-                    setLoginError('Credenciais incorretas');
-                }
-            } catch (err) {
-                setLoginError('Erro ao conectar. Tente novamente.');
-            } finally {
-                setIsLoginLoading(false);
-            }
-        };
-
-        return (
-            <div className="flex h-[100dvh] w-full items-center justify-center bg-gray-100 p-4">
-                <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8">
-                    <div className="text-center mb-8">
-                        <div className="w-16 h-16 mx-auto mb-4 bg-whatsapp-green rounded-full flex items-center justify-center">
-                            <span className="material-icons text-3xl text-white">admin_panel_settings</span>
-                        </div>
-                        <h1 className="text-2xl font-bold text-gray-800">Admin Painel</h1>
-                        <p className="text-gray-500 mt-1">Entre para acessar o painel administrativo</p>
-                    </div>
-                    
-                    <form onSubmit={handleLogin} className="space-y-4">
-                        {loginError && (
-                            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm text-center animate-shake">
-                                {loginError}
-                            </div>
-                        )}
-                        
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Usuário</label>
-                            <input
-                                type="text"
-                                value={loginUsername}
-                                onChange={e => setLoginUsername(e.target.value)}
-                                className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-whatsapp-green/50 focus:border-whatsapp-green text-gray-900"
-                                placeholder="Digite seu usuário"
-                                autoComplete="username"
-                                required
-                                disabled={isLoginLoading}
-                            />
-                        </div>
-                        
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
-                            <input
-                                type="password"
-                                value={loginPassword}
-                                onChange={e => setLoginPassword(e.target.value)}
-                                className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-whatsapp-green/50 focus:border-whatsapp-green text-gray-900"
-                                placeholder="Digite sua senha"
-                                autoComplete="current-password"
-                                required
-                                disabled={isLoginLoading}
-                            />
-                        </div>
-                        
-                        <button
-                            type="submit"
-                            disabled={isLoginLoading}
-                            className="w-full py-3 bg-whatsapp-green text-white font-bold rounded-lg hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                        >
-                            {isLoginLoading ? (
-                                <>
-                                    <span className="material-icons animate-spin">refresh</span>
-                                    Entrando...
-                                </>
-                            ) : (
-                                'Entrar no Painel'
-                            )}
-                        </button>
-                    </form>
-                    
-                    <div className="mt-6 text-center text-xs text-gray-400">
-                        <p>ChegoJá Admin v4.2</p>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
     const [drivers, setDrivers] = useState<UserProfile[]>([]);
     const [selectedDriver, setSelectedDriver] = useState<UserProfile | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -1118,6 +1021,121 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
             return { label: `${status.daysLeft} dias`, color: 'bg-green-100 text-green-800' };
         }
         return { label: 'Vencido', color: 'bg-red-100 text-red-800' };
+    };
+
+    // Resolve which admin user is active: from prop (mobile app) or local login (web painel)
+    const activeAdmin = currentUser || localAdmin;
+
+    // If no admin user at all, show the login page
+    if (!activeAdmin) {
+        const handleLogin = async (e: React.FormEvent) => {
+            e.preventDefault();
+            if (!loginUsername || !loginPassword) {
+                setLoginError('Preencha usuário e senha');
+                return;
+            }
+            
+            setIsLoginLoading(true);
+            setLoginError('');
+            
+            try {
+                const admin = await loginUser(loginUsername, loginPassword, UserRole.ADMIN);
+                if (admin) {
+                    setLocalAdmin(admin);
+                    setLoginError('');
+                    localStorage.setItem('chegoja_admin', JSON.stringify(admin));
+                } else {
+                    setLoginError('Credenciais incorretas');
+                }
+            } catch (err) {
+                setLoginError('Erro ao conectar. Tente novamente.');
+            } finally {
+                setIsLoginLoading(false);
+            }
+        };
+
+        const handleLogout = () => {
+            setLocalAdmin(null);
+            localStorage.removeItem('chegoja_admin');
+            setLoginUsername('');
+            setLoginPassword('');
+        };
+
+        return (
+            <div className="flex h-[100dvh] w-full items-center justify-center bg-gray-100 p-4">
+                <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8">
+                    <div className="text-center mb-8">
+                        <div className="w-16 h-16 mx-auto mb-4 bg-whatsapp-green rounded-full flex items-center justify-center">
+                            <span className="material-icons text-3xl text-white">admin_panel_settings</span>
+                        </div>
+                        <h1 className="text-2xl font-bold text-gray-800">Admin Painel</h1>
+                        <p className="text-gray-500 mt-1">Entre para acessar o painel administrativo</p>
+                    </div>
+                    
+                    <form onSubmit={handleLogin} className="space-y-4">
+                        {loginError && (
+                            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm text-center animate-shake">
+                                {loginError}
+                            </div>
+                        )}
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Usuário</label>
+                            <input
+                                type="text"
+                                value={loginUsername}
+                                onChange={e => setLoginUsername(e.target.value)}
+                                className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-whatsapp-green/50 focus:border-whatsapp-green text-gray-900"
+                                placeholder="Digite seu usuário"
+                                autoComplete="username"
+                                required
+                                disabled={isLoginLoading}
+                            />
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+                            <input
+                                type="password"
+                                value={loginPassword}
+                                onChange={e => setLoginPassword(e.target.value)}
+                                className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-whatsapp-green/50 focus:border-whatsapp-green text-gray-900"
+                                placeholder="Digite sua senha"
+                                autoComplete="current-password"
+                                required
+                                disabled={isLoginLoading}
+                            />
+                        </div>
+                        
+                        <button
+                            type="submit"
+                            disabled={isLoginLoading}
+                            className="w-full py-3 bg-whatsapp-green text-white font-bold rounded-lg hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                            {isLoginLoading ? (
+                                <>
+                                    <span className="material-icons animate-spin">refresh</span>
+                                    Entrando...
+                                </>
+                            ) : (
+                                'Entrar no Painel'
+                            )}
+                        </button>
+                    </form>
+                    
+                    <div className="mt-6 text-center text-xs text-gray-400">
+                        <p>ChegoJá Admin v4.2</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Wrapper logout: clears both prop-based and local login
+    const handleAdminLogout = () => {
+        if (onLogout) onLogout();
+        setLocalAdmin(null);
+        localStorage.removeItem('chegoja_admin');
     };
 
     return (
