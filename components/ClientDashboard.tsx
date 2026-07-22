@@ -96,13 +96,20 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
 
         // Update current location
         if (navigator.geolocation && (!currentAddress || currentAddress === 'Obtendo localização...')) {
-            navigator.geolocation.getCurrentPosition(async (pos) => {
-                setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-                if (!isManualOrigin.current) {
-                    const addr = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
-                    if (addr) setCurrentAddress(addr);
-                }
-            });
+            navigator.geolocation.getCurrentPosition(
+                async (pos) => {
+                    setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                    if (!isManualOrigin.current) {
+                        const addr = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+                        if (addr) setCurrentAddress(addr);
+                    }
+                },
+                (err) => {
+                    console.warn("[ClientDashboard] Geolocation error on search:", err);
+                    alert("Acesso à localização negado ou indisponível. Por favor, ative a permissão de localização nas configurações do aparelho.");
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
         }
     };
 
@@ -240,14 +247,21 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             .subscribe();
 
         if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(async (pos) => {
-                setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-                // Reverse geocode da localização atual se não for manual
-                if (!isManualOrigin.current) {
-                    const addr = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
-                    if (addr) setCurrentAddress(addr);
-                }
-            });
+            navigator.geolocation.getCurrentPosition(
+                async (pos) => {
+                    setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                    // Reverse geocode da localização atual se não for manual
+                    if (!isManualOrigin.current) {
+                        const addr = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+                        if (addr) setCurrentAddress(addr);
+                    }
+                },
+                (err) => {
+                    console.warn("[ClientDashboard] Geolocation error on mount:", err);
+                    alert("Aviso: O ChegoJá precisa de acesso à sua localização para encontrar motoristas próximos. Por favor, ative o GPS e conceda permissão de localização ao aplicativo nas configurações do seu celular.");
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
         }
         const profileSub = subscribeToProfiles(() => fetchOnlineDrivers().then(setDrivers));
         const rideSub = subscribeToRides(currentUser.id, 'client', (updatedRide) => setActiveRide(updatedRide));
@@ -408,6 +422,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                 estimated_time: estimates?.time,
                 payment_method: paymentMethod,
                 status: 'searching',
+                is_broadcast: !targetDriverId,
                 coupon_id: selectedCoupon?.id,
                 discount_amount: discountAmount
             });
@@ -654,14 +669,22 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                                                     onClick={() => {
                                                         if (navigator.geolocation) {
                                                             setCurrentAddress('Atualizando...');
-                                                            navigator.geolocation.getCurrentPosition(async (pos) => {
-                                                                setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-                                                                const addr = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
-                                                                if (addr) {
-                                                                    setCurrentAddress(addr);
-                                                                    isManualOrigin.current = false;
-                                                                }
-                                                            });
+                                                            navigator.geolocation.getCurrentPosition(
+                                                                async (pos) => {
+                                                                    setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                                                                    const addr = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+                                                                    if (addr) {
+                                                                        setCurrentAddress(addr);
+                                                                        isManualOrigin.current = false;
+                                                                    }
+                                                                },
+                                                                (err) => {
+                                                                    console.warn("[ClientDashboard] Geolocation error on manual refresh:", err);
+                                                                    setCurrentAddress('Não foi possível obter a localização');
+                                                                    alert("Falha ao obter localização. Verifique se o GPS está ativo e se a permissão foi concedida.");
+                                                                },
+                                                                { enableHighAccuracy: true, timeout: 10000 }
+                                                            );
                                                         }
                                                     }}
                                                     className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center hover:bg-blue-200 transition shrink-0"

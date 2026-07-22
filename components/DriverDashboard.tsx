@@ -238,6 +238,17 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
             const updated = { ...currentUser, status: newStatus };
             onUpdateUser(updated);
         }
+
+        if ((window as any).Android) {
+            if (newStatus === DriverStatus.AVAILABLE) {
+                (window as any).Android.requestAllPermissions();
+                (window as any).Android.startBackgroundService();
+                (window as any).Android.startRealtimeRideService(currentUser.id);
+            } else {
+                (window as any).Android.stopBackgroundService();
+                (window as any).Android.stopRealtimeRideService();
+            }
+        }
     };
 
     const handlePanicButton = async () => {

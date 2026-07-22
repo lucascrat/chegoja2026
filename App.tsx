@@ -147,6 +147,15 @@ function AppInner() {
   const [isRegisteringDriver, setIsRegisteringDriver] = useState(false);
   const [entryName, setEntryName] = useState('');
   const [entryPhone, setEntryPhone] = useState('');
+
+  // Handler nativo: recebe corrida do RealtimeRideService (WebSocket Java)
+  useEffect(() => {
+    (window as any).handleNativeRide = (rideData: any) => {
+      console.log('[NativeRealtime] Corrida recebida:', rideData?.id);
+    };
+    return () => { delete (window as any).handleNativeRide; };
+  }, []);
+
   const [entryAvatarFile, setEntryAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
@@ -239,6 +248,17 @@ function AppInner() {
           // Inicializar Push Notifications para todos os usuários
           console.log('[DEBUG] Calling pushService.initialize...');
           await pushService.initialize(currentUser.id);
+
+          // Firebase Analytics (web)
+          try {
+            const { logFirebaseEvent } = await import('./services/firebase');
+            logFirebaseEvent('session_start', {
+              user_id: currentUser.id,
+              role: currentUser.role,
+            });
+          } catch (e) {
+            // Firebase Analytics opcional
+          }
 
           // Permissões específicas por papel
           if (currentUser.role === UserRole.DRIVER) {
@@ -750,6 +770,12 @@ function AppInner() {
     };
 
     loadContacts();
+
+    // Reiniciar background service se motorista ja estava online
+    if ((window as any).Android && currentUser?.role === UserRole.DRIVER && currentUser?.status === DriverStatus.AVAILABLE) {
+      (window as any).Android.startBackgroundService();
+      (window as any).Android.startRealtimeRideService(currentUser.id);
+    }
 
     const profileSub = subscribeToProfiles(async (payload?: any) => {
       // Refresh current user if it was their profile that changed
@@ -1283,6 +1309,18 @@ function AppInner() {
     localStorage.setItem('chegoja_user', JSON.stringify(updatedUser));
 
     await updateDriverStatus(currentUser.id, newStatus);
+
+    // Bridge nativa: manter app vivo em background
+    if ((window as any).Android) {
+      if (newStatus === DriverStatus.AVAILABLE) {
+        (window as any).Android.requestAllPermissions();
+        (window as any).Android.startBackgroundService();
+        (window as any).Android.startRealtimeRideService(currentUser.id);
+      } else {
+        (window as any).Android.stopBackgroundService();
+        (window as any).Android.stopRealtimeRideService();
+      }
+    }
   };
 
   const resetForm = () => {
@@ -1309,6 +1347,7 @@ function AppInner() {
       <DriverSubscription
         currentUser={currentUser}
         onClose={() => { }}
+        onLogout={handleLogout}
         isBlocked={true}
       />
     );
@@ -1662,6 +1701,7 @@ function AppInner() {
               // 1. Handle Local ACK (Driver clicked "Close" on Success Screen)
               if (newStatus === 'finished_ack') {
                 await updateDriverStatus(currentUser.id, DriverStatus.AVAILABLE);
+                if ((window as any).Android) (window as any).Android.startBackgroundService();
                 setActiveRide(null);
                 setIsRideMapMinimized(false);
                 return;
@@ -1694,6 +1734,7 @@ function AppInner() {
                 if (newStatus === 'cancelled') {
                   // Cancelled -> Close immediately
                   await updateDriverStatus(currentUser.id, DriverStatus.AVAILABLE);
+                  if ((window as any).Android) (window as any).Android.startBackgroundService();
                   setActiveRide(null);
                   setIsRideMapMinimized(false);
                 } else if (newStatus === 'finished') {

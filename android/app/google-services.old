@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "514748537390",
+    "project_id": "chegoja-pro-b0f2a",
+    "storage_bucket": "chegoja-pro-b0f2a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:514748537390:android:aa05903d8673da54e5ddbf",
+        "android_client_info": {
+          "package_name": "br.com.chegoja.motorista"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCATMp-LJs3gN0pQbt7PGuVXD9gZu4k-DU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

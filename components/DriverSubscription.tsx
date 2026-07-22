@@ -9,12 +9,13 @@ import { Browser } from '@capacitor/browser';
 interface DriverSubscriptionProps {
     currentUser: UserProfile;
     onClose: () => void;
+    onLogout?: () => void; // Callback to handle logout
     isBlocked?: boolean; // Nova propriedade para forçar pagamento
 }
 
 type Step = 'plans' | 'payer_data' | 'card_form' | 'payment_qr' | 'success';
 
-export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentUser, onClose, isBlocked = false }) => {
+export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentUser, onClose, onLogout, isBlocked = false }) => {
     const [plans, setPlans] = useState<DriverPlan[]>([]);
     const [step, setStep] = useState<Step>('plans');
     const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
@@ -320,12 +321,17 @@ export const DriverSubscription: React.FC<DriverSubscriptionProps> = ({ currentU
                         </p>
                     </div>
 
-                    {/* Botão Fechar (Direita) - Apenas se não bloqueado */}
-                    {!isBlocked && (
+                    {/* Botão Fechar ou Sair (Direita) */}
+                    {!isBlocked ? (
                         <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition ml-2">
                             <span className="material-icons">close</span>
                         </button>
-                    )}
+                    ) : onLogout ? (
+                        <button onClick={onLogout} className="px-3 py-1.5 hover:bg-white/20 rounded-lg transition ml-2 flex items-center gap-1 text-xs font-bold border border-white/20" title="Sair da Conta">
+                            <span className="material-icons text-sm">logout</span>
+                            Sair
+                        </button>
+                    ) : null}
                 </div>
 
                 <div className="p-4 md:p-6 overflow-y-auto bg-gray-50 flex-1 custom-scrollbar">

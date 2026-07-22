@@ -27,3 +27,20 @@ dist-ssr
 keystore.properties
 *.apk
 *.aab
+
+# Credenciais e chaves — NUNCA versionar
+.env
+.env.*
+!.env.example
+*.pem
+coolify_key.pem
+google-services.json
+google-services.prod.json
+
+# Certificados de pagamento
+payment-manager/.env
+payment-manager/secrets/
+
+# Logs de crash da JVM
+hs_err_pid*
+replay_pid*

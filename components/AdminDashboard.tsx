@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { supabase, fetchAllDriversForAdmin, deleteDriver, updateDriverStatus, updateDriverVehicle, updateDriverPassword, fetchAppSettings, updateAppSettings, approveDriver, fetchMessages, subscribeToMessages, subscribeToProfiles, fetchBingoSettings, updateBingoSettings, drawBingoNumber, drawSpecificBingoNumber, resetBingo, fetchBingoRanking, subscribeToBingo, sendBroadcast, addSubscriptionDays, fetchBanners, addBanner, deleteBanner, updateBannerOrder, uploadBannerImage, fetchAllCoupons, createCoupon, deleteCoupon, createDispatchRide } from '../services/supabaseClient';
+import { supabase, fetchAllDriversForAdmin, deleteDriver, updateDriverStatus, updateDriverVehicle, updateDriverPassword, fetchAppSettings, updateAppSettings, approveDriver, fetchMessages, subscribeToMessages, subscribeToProfiles, fetchBingoSettings, updateBingoSettings, drawBingoNumber, drawSpecificBingoNumber, resetBingo, fetchBingoRanking, subscribeToBingo, sendBroadcast, addSubscriptionDays, fetchBanners, addBanner, deleteBanner, updateBannerOrder, uploadBannerImage, fetchAllCoupons, createCoupon, deleteCoupon, createDispatchRide, loginUser } from '../services/supabaseClient';
 import { UserProfile, DriverStatus, CallRecord, AppSettings, Message, BingoSettings, BingoRankingUser, AdminTab, Banner, Coupon } from '../types';
 import { AdminWalletManager } from './AdminWalletManager';
 import { soundService } from '../services/soundService';
@@ -15,11 +15,116 @@ import { WahaService } from '../services/wahaService'; // Importar WahaService
 import { ensureMapbox, searchAddresses, getRoute, AddressSuggestion } from '../services/mapboxService';
 
 interface AdminDashboardProps {
-    currentUser: UserProfile;
+    currentUser: UserProfile | null;
     onLogout: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }) => {
+    // Login state for standalone panel
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [loginUsername, setLoginUsername] = useState('');
+    const [loginPassword, setLoginPassword] = useState('');
+    const [loginError, setLoginError] = useState('');
+    const [isLoginLoading, setIsLoginLoading] = useState(false);
+    
+    // If no currentUser and not logged in via standalone, show login page
+    if (!currentUser && !isLoggedIn) {
+        const handleLogin = async (e: React.FormEvent) => {
+            e.preventDefault();
+            if (!loginUsername || !loginPassword) {
+                setLoginError('Preencha usuário e senha');
+                return;
+            }
+            
+            setIsLoginLoading(true);
+            setLoginError('');
+            
+            try {
+                const admin = await loginUser(loginUsername, loginPassword, UserRole.ADMIN);
+                if (admin) {
+                    setIsLoggedIn(true);
+                    setLoginError('');
+                    // Page will re-render with the new user context
+                } else {
+                    setLoginError('Credenciais incorretas');
+                }
+            } catch (err) {
+                setLoginError('Erro ao conectar. Tente novamente.');
+            } finally {
+                setIsLoginLoading(false);
+            }
+        };
+
+        return (
+            <div className="flex h-[100dvh] w-full items-center justify-center bg-gray-100 p-4">
+                <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8">
+                    <div className="text-center mb-8">
+                        <div className="w-16 h-16 mx-auto mb-4 bg-whatsapp-green rounded-full flex items-center justify-center">
+                            <span className="material-icons text-3xl text-white">admin_panel_settings</span>
+                        </div>
+                        <h1 className="text-2xl font-bold text-gray-800">Admin Painel</h1>
+                        <p className="text-gray-500 mt-1">Entre para acessar o painel administrativo</p>
+                    </div>
+                    
+                    <form onSubmit={handleLogin} className="space-y-4">
+                        {loginError && (
+                            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm text-center animate-shake">
+                                {loginError}
+                            </div>
+                        )}
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Usuário</label>
+                            <input
+                                type="text"
+                                value={loginUsername}
+                                onChange={e => setLoginUsername(e.target.value)}
+                                className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-whatsapp-green/50 focus:border-whatsapp-green text-gray-900"
+                                placeholder="Digite seu usuário"
+                                autoComplete="username"
+                                required
+                                disabled={isLoginLoading}
+                            />
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+                            <input
+                                type="password"
+                                value={loginPassword}
+                                onChange={e => setLoginPassword(e.target.value)}
+                                className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-whatsapp-green/50 focus:border-whatsapp-green text-gray-900"
+                                placeholder="Digite sua senha"
+                                autoComplete="current-password"
+                                required
+                                disabled={isLoginLoading}
+                            />
+                        </div>
+                        
+                        <button
+                            type="submit"
+                            disabled={isLoginLoading}
+                            className="w-full py-3 bg-whatsapp-green text-white font-bold rounded-lg hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                            {isLoginLoading ? (
+                                <>
+                                    <span className="material-icons animate-spin">refresh</span>
+                                    Entrando...
+                                </>
+                            ) : (
+                                'Entrar no Painel'
+                            )}
+                        </button>
+                    </form>
+                    
+                    <div className="mt-6 text-center text-xs text-gray-400">
+                        <p>ChegoJá Admin v4.2</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     const [drivers, setDrivers] = useState<UserProfile[]>([]);
     const [selectedDriver, setSelectedDriver] = useState<UserProfile | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -3081,17 +3186,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                             <div key={ride.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200 flex items-center gap-4">
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-2 mb-1">
-                                                        <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full ${ride.status === 'completed' || ride.status === 'finished' ? 'bg-green-100 text-green-700' :
+                                                        <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full ${ride.status === 'finished' ? 'bg-green-100 text-green-700' :
                                                             ride.status === 'accepted' ? 'bg-blue-100 text-blue-700 animate-pulse' :
-                                                                ride.status === 'in_progress' ? 'bg-orange-100 text-orange-700' :
-                                                                    ride.status === 'cancelled' ? 'bg-red-100 text-red-700' :
-                                                                        'bg-gray-100 text-gray-600'
+                                                                ride.status === 'en_route' ? 'bg-orange-100 text-orange-700' :
+                                                                    ride.status === 'arrived' ? 'bg-yellow-100 text-yellow-700' :
+                                                                        ride.status === 'started' ? 'bg-purple-100 text-purple-700' :
+                                                                            ride.status === 'waiting_payment' ? 'bg-indigo-100 text-indigo-700' :
+                                                                                ride.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                                                                                    'bg-gray-100 text-gray-600'
                                                             }`}>
-                                                            {ride.status === 'completed' || ride.status === 'finished' ? '✓ Finalizada' :
+                                                            {ride.status === 'finished' ? '✓ Finalizada' :
                                                                 ride.status === 'accepted' ? '📤 Enviada' :
-                                                                    ride.status === 'in_progress' ? '🚗 Em Corrida' :
-                                                                        ride.status === 'cancelled' ? '✗ Cancelada' :
-                                                                            ride.status}
+                                                                    ride.status === 'en_route' ? '🚗 A Caminho' :
+                                                                        ride.status === 'arrived' ? '📍 Chegou' :
+                                                                            ride.status === 'started' ? '🚗 Em Corrida' :
+                                                                                ride.status === 'waiting_payment' ? '💳 Ag. Pagamento' :
+                                                                                    ride.status === 'cancelled' ? '✗ Cancelada' :
+                                                                                        ride.status}
                                                         </span>
                                                         <span className="text-xs text-gray-500">
                                                             {new Date(ride.created_at).toLocaleString('pt-BR', {
@@ -3113,7 +3224,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onL
                                                     <p className="text-lg font-bold text-green-600">
                                                         {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(ride.estimated_price || 0)}
                                                     </p>
-                                                    {(ride.status === 'accepted' || ride.status === 'in_progress') && (
+                                                    {(ride.status === 'accepted' || ride.status === 'en_route' || ride.status === 'arrived' || ride.status === 'started' || ride.status === 'waiting_payment') && (
                                                         <button
                                                             onClick={() => cancelDispatchRide(ride.id, ride.driver_id)}
                                                             className="text-xs text-red-500 hover:text-red-700 mt-1 flex items-center gap-1"

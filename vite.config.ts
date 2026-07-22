@@ -30,6 +30,8 @@ export default defineConfig(({ mode }) => {
         'import.meta.env.VITE_TEST_CLIENT_PHONE': JSON.stringify(env.VITE_TEST_CLIENT_PHONE || ''),
         'import.meta.env.VITE_TEST_DRIVER_USER': JSON.stringify(env.VITE_TEST_DRIVER_USER || ''),
         'import.meta.env.VITE_TEST_DRIVER_PASS': JSON.stringify(env.VITE_TEST_DRIVER_PASS || ''),
+        'import.meta.env.VITE_EFI_ACCOUNT_CODE': JSON.stringify(env.VITE_EFI_ACCOUNT_CODE || ''),
+        'import.meta.env.VITE_ENABLE_PUSH': JSON.stringify(env.VITE_ENABLE_PUSH || ''),
       },
       resolve: {
         alias: {

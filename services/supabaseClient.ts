@@ -861,11 +861,14 @@ export const registerClientWithPhoto = async (username: string, phone: string, a
       finalUrl = await uploadFile(avatarFile, 'images');
     }
 
-    // Check if exists
-    const { data: existing } = await supabase.from('profiles').select('*').eq('phone', phone).maybeSingle();
-    if (existing) {
-      // Auto login
-      return existing as UserProfile;
+    // Check if exists (limit 1 to handle any duplicates gracefully)
+    const { data: existingList, error: checkError } = await supabase.from('profiles').select('*').eq('phone', phone).limit(1);
+    if (checkError) {
+      handleDbError(checkError, "registerClientWithPhoto_CHECK");
+      return null;
+    }
+    if (existingList && existingList.length > 0) {
+      return existingList[0] as UserProfile;
     }
 
     const { data, error } = await supabase
@@ -996,15 +999,15 @@ export const loginUser = async (username: string, password?: string, role?: User
     }
 
     // Sem senha: apenas busca o perfil (refresh de dados, não autenticação)
-    let query = supabase.from('profiles').select('*').eq('username', username);
+    let query = supabase.from('profiles').select('*').eq('username', username).limit(1);
     if (role) query = query.eq('role', role);
 
-    const { data, error } = await query.maybeSingle();
+    const { data: list, error } = await query;
     if (error) {
       handleDbError(error, "loginUser");
       return null;
     }
-    return data as UserProfile;
+    return (list && list.length > 0 ? list[0] : null) as UserProfile | null;
   } catch (e) {
     handleDbError(e, "loginUser_EXCEPTION");
     return null;
@@ -1029,18 +1032,18 @@ export const loginDriver = async (username: string, password?: string): Promise<
 };
 
 export const checkUserExists = async (field: 'username' | 'phone', value: string): Promise<boolean> => {
-  const { data, error } = await supabase
+  const { data: list, error } = await supabase
     .from('profiles')
     .select('id')
     .eq(field, value)
-    .maybeSingle();
+    .limit(1);
 
   if (error) {
     console.warn(`Error checking ${field} existence:`, error);
     return false;
   }
 
-  return !!data;
+  return !!(list && list.length > 0);
 };
 
 export const updateUserAvatar = async (userId: string, avatarFile: File): Promise<string | null> => {
@@ -1235,7 +1238,17 @@ export const cancelRide = async (rideId: string): Promise<boolean> => {
 };
 
 export const acceptRide = async (rideId: string, driverId: string): Promise<boolean> => {
-  const { error } = await supabase
+  // Tenta a RPC atômica primeiro (se existir no banco)
+  const { data, error } = await supabase
+    .rpc('accept_ride_atomic', { p_ride_id: rideId, p_driver_id: driverId });
+
+  if (!error) {
+    return !!data;
+  }
+
+  // Fallback: update direto com condição status = 'searching'
+  console.warn('[acceptRide] RPC não disponível, usando fallback direto:', error.message);
+  const { error: upError } = await supabase
     .from('rides')
     .update({
       driver_id: driverId,
@@ -1243,10 +1256,10 @@ export const acceptRide = async (rideId: string, driverId: string): Promise<bool
       updated_at: new Date().toISOString()
     })
     .eq('id', rideId)
-    .eq('status', 'searching'); // Garante que ninguém aceitou ainda
+    .eq('status', 'searching');
 
-  if (error) {
-    handleDbError(error, "acceptRide");
+  if (upError) {
+    handleDbError(upError, "acceptRide_fallback");
     return false;
   }
   return true;
@@ -1286,14 +1299,20 @@ export const updateRidePayment = async (rideId: string, paymentData: any): Promi
 
 export const fetchActiveRide = async (userId: string, role: 'client' | 'driver'): Promise<Ride | null> => {
   const field = role === 'client' ? 'client_id' : 'driver_id';
-  const { data, error } = await supabase
+  let query = supabase
     .from('rides')
     .select('*, driver:driver_id(*), client:client_id(*)')
     .eq(field, userId)
-    .not('status', 'in', '("finished","cancelled")')
     .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+
+  if (role === 'client') {
+    query = query.not('status', 'in', '("finished","cancelled")');
+  } else {
+    query = query.in('status', ['accepted', 'en_route', 'arrived', 'started', 'waiting_payment']);
+  }
+
+  const { data, error } = await query.maybeSingle();
 
   if (error) {
     handleDbError(error, "fetchActiveRide");
@@ -1335,17 +1354,12 @@ export const subscribeToRides = (
       handle
     );
   } else {
-    // Motorista — dois filtros no servidor:
-    // 1) Corridas da minha região: células de ~11km cobrindo o raio de chamada.
-    //    Eventos de corridas de outras cidades nem chegam ao aparelho.
-    //    Sem células (GPS ainda indisponível), cai no filtro antigo por status.
+    // Motorista — usa filtro de status e filtra distância localmente no cliente
     channel.on(
       'postgres_changes',
       {
         event: '*', schema: 'chegoja', table: 'rides',
-        filter: opts.cells?.length
-          ? `origin_cell=in.(${opts.cells.join(',')})`
-          : `status=eq.searching`
+        filter: `status=eq.searching`
       },
       handle
     );
@@ -1918,24 +1932,25 @@ export const getTariffForTime = (settings: AppSettings, vehicleType: 'car' | 'mo
  */
 
 export const findAndAssignNextDriver = async (rideId: string, currentDriverId: string): Promise<boolean> => {
+  // Tenta a RPC atômica primeiro (se existir no banco)
+  const { data, error } = await supabase
+    .rpc('rotate_driver_atomic', { p_ride_id: rideId, p_current_driver_id: currentDriverId });
+
+  if (!error && data && (data as any).success) {
+    return true;
+  }
+
+  // Fallback: método direto (multiqueries — menos atômico mas funciona)
+  console.warn('[findAndAssignNextDriver] RPC não disponível, usando fallback:', error?.message);
+
   try {
-    // 1. Get current ride to see ignored drivers
-    const { data: ride, error: rideError } = await supabase
-      .from('rides')
-      .select('*')
-      .eq('id', rideId)
-      .single();
+    const { data: ride } = await supabase.from('rides').select('*').eq('id', rideId).single();
+    if (!ride) return false;
 
-    if (rideError || !ride) return false;
-
-    // Convert to array of strings (UUIDs)
     const ignored: string[] = Array.isArray(ride.ignored_drivers) ? ride.ignored_drivers : [];
-    if (!ignored.includes(currentDriverId)) {
-      ignored.push(currentDriverId);
-    }
+    if (!ignored.includes(currentDriverId)) ignored.push(currentDriverId);
 
-    // 2. Find next available driver
-    const { data: nextDrivers, error: driverError } = await supabase
+    const { data: nextDrivers } = await supabase
       .from('profiles')
       .select('id')
       .eq('role', 'driver')
@@ -1945,34 +1960,23 @@ export const findAndAssignNextDriver = async (rideId: string, currentDriverId: s
       .not('id', 'in', `(${ignored.length > 0 ? ignored.map(id => `'${id}'`).join(',') : "'00000000-0000-0000-0000-000000000000'"})`)
       .limit(1);
 
-    if (driverError) throw driverError;
-
     if (nextDrivers && nextDrivers.length > 0) {
-      // Assign to next
-      await supabase
-        .from('rides')
-        .update({
-          driver_id: nextDrivers[0].id,
-          status: 'accepted',
-          ignored_drivers: ignored,
-          last_driver_offered_at: new Date().toISOString()
-        })
-        .eq('id', rideId);
-      return true;
+      await supabase.from('rides').update({
+        driver_id: nextDrivers[0].id,
+        status: 'searching',
+        ignored_drivers: ignored,
+        last_driver_offered_at: new Date().toISOString()
+      }).eq('id', rideId);
     } else {
-      // No more drivers, set back to searching
-      await supabase
-        .from('rides')
-        .update({
-          driver_id: null,
-          status: 'searching',
-          ignored_drivers: ignored
-        })
-        .eq('id', rideId);
-      return false;
+      await supabase.from('rides').update({
+        driver_id: null,
+        status: 'searching',
+        ignored_drivers: ignored
+      }).eq('id', rideId);
     }
+    return true;
   } catch (e) {
-    console.error("Error in findAndAssignNextDriver:", e);
+    console.error("Error in findAndAssignNextDriver fallback:", e);
     return false;
   }
 };

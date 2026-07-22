@@ -337,7 +337,7 @@ export const WhatsappBot = {
             .channel('bot-messages')
             .on('postgres_changes', {
                 event: 'INSERT',
-                schema: 'public',
+                schema: 'chegoja',
                 table: 'messages',
                 filter: `receiver_id=eq.${BOT_ID}`
             }, (payload) => {

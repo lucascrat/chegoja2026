@@ -1,6 +1,7 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { supabase, fetchDriverPlans } from './supabaseClient';
 import { UserProfile, PayerFormData, PixPaymentResponse, StoreProduct, CardFormData } from '../types';
+import { EFI_ACCOUNT_CODE } from '../constants';
 
 // --- EFI HELPERS ---
 
@@ -42,8 +43,13 @@ const tokenizeCard = async (cardData: CardFormData, cpf: string): Promise<string
             const rawYear = cardData.expirationYear.toString();
             const expYear = rawYear.length === 2 ? `20${rawYear}` : rawYear;
 
+            if (!EFI_ACCOUNT_CODE) {
+                clearTimeout(timeout);
+                reject(new Error("Código da conta Efí não configurado. Defina VITE_EFI_ACCOUNT_CODE no .env"));
+                return;
+            }
             EfiPay.CreditCard
-                .setAccount("21e60cb9dc98eb4f5d0377903434dc3d")
+                .setAccount(EFI_ACCOUNT_CODE)
                 .setEnvironment("production")
                 .setCreditCardData({
                     brand: detectCardBrand(cleanCardNumber),
@@ -101,7 +107,8 @@ const vpsPost = async (body: object): Promise<any> => {
 // --- MAIN EXPORTED METHODS ---
 
 const IS_NATIVE = Capacitor.isNativePlatform();
-const VPS_IP_URL = 'http://168.231.98.99:3000/payment-manager';
+// IP da VPS configurável via env — evita hardcoded no bundle
+const VPS_IP_URL = (import.meta as any).env?.VITE_VPS_PAYMENT_URL || 'http://168.231.98.99:3000/payment-manager';
 const FINAL_VPS_URL = IS_NATIVE
     ? VPS_IP_URL
     : '/api/payment-vps/payment-manager';
